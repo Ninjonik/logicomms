@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Default desktop capabilities for LogiComms.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "process:default",
+    "shell:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered"
+  ]
+}

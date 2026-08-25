@@ -16,9 +16,9 @@
       "icons/icon.ico"
     ]
   },
-  "productName": "create-tauri-react",
+  "productName": "LogiComms",
   "version": "0.1.0",
-  "identifier": "com.tauri.app",
+  "identifier": "com.logicomms.desktop",
   "plugins": {
     "process": {
       "active": true
@@ -30,9 +30,11 @@
     },
     "windows": [
       {
-        "title": "Tauri App",
-        "width": 1000,
-        "height": 600,
+        "title": "LogiComms",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 1120,
+        "minHeight": 760,
         "dragDropEnabled": false
       }
     ]

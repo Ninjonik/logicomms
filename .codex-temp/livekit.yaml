@@ -1,0 +1,15 @@
+port: 6330
+log_level: info
+rtc:
+  tcp_port: 6331
+  udp_port: 6332
+  use_external_ip: true
+turn:
+  enabled: true
+  domain: logicommsrelay.igportals.eu
+  tls_port: 5349
+  udp_port: 443
+  cert_file: "/etc/nginx/ssl/*.igportals.eu_igportals.eu_P256/fullchain.cer"
+  key_file: "/etc/nginx/ssl/*.igportals.eu_igportals.eu_P256/private.key"
+keys:
+  APImJZZkvqQKUtS: 6gn1nl27JNldPSC18EtVKro1YOeghfsT0osYXWzAih4
