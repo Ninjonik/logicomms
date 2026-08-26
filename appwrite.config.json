@@ -1,0 +1,118 @@
+{
+    "organizationId": "6a8f0bc8001ca4fa8fb4",
+    "projectId": "logicomms",
+    "projectName": "logicomms",
+    "settings": {
+        "services": {
+            "account": true,
+            "avatars": true,
+            "databases": true,
+            "locale": true,
+            "health": true,
+            "storage": true,
+            "teams": true,
+            "users": true,
+            "sites": true,
+            "functions": true,
+            "graphql": true,
+            "messaging": true
+        },
+        "protocols": {
+            "rest": true,
+            "graphql": true,
+            "websocket": true
+        },
+        "auth": {
+            "methods": {
+                "jwt": true,
+                "phone": true,
+                "invites": true,
+                "anonymous": true,
+                "email-otp": true,
+                "magic-url": true,
+                "email-password": true
+            },
+            "security": {
+                "duration": 31536000,
+                "limit": null,
+                "sessionsLimit": null,
+                "passwordHistory": null,
+                "passwordDictionary": false,
+                "personalDataCheck": false,
+                "sessionAlerts": false,
+                "mockNumbers": []
+            }
+        }
+    },
+    "functions": [
+        {
+            "$id": "api",
+            "name": "LogiComms API",
+            "runtime": "node-22",
+            "buildSpecification": "s-0.5vcpu-512mb",
+            "runtimeSpecification": "s-0.5vcpu-512mb",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "scopes": [
+                "rows.read",
+                "rows.write"
+            ],
+            "schedule": "* * * * *",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".npm"
+            ],
+            "deploymentRetention": 0,
+            "path": "functions/logicomms-api"
+        }
+    ],
+    "tablesDB": [
+        {
+            "$id": "logicomms",
+            "name": "LogiComms",
+            "enabled": true
+        }
+    ],
+    "tables": [
+        {
+            "$id": "lobbies",
+            "$permissions": [],
+            "databaseId": "logicomms",
+            "name": "Lobbies",
+            "enabled": true,
+            "rowSecurity": true,
+            "columns": [
+                { "key": "ownerId", "type": "varchar", "size": 36, "required": true },
+                { "key": "roomName", "type": "varchar", "size": 64, "required": true },
+                { "key": "lastActiveAt", "type": "datetime", "required": true }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "members",
+            "$permissions": [],
+            "databaseId": "logicomms",
+            "name": "Members",
+            "enabled": true,
+            "rowSecurity": true,
+            "columns": [
+                { "key": "lobbyId", "type": "varchar", "size": 36, "required": true },
+                { "key": "userId", "type": "varchar", "size": 36, "required": true },
+                { "key": "nickname", "type": "varchar", "size": 32, "required": true },
+                { "key": "livekitIdentity", "type": "varchar", "size": 64, "required": true },
+                { "key": "lastSeenAt", "type": "datetime", "required": true }
+            ],
+            "indexes": [
+                { "key": "members_by_lobby", "type": "key", "columns": ["lobbyId"] },
+                { "key": "member_by_lobby_user", "type": "unique", "columns": ["lobbyId", "userId"] }
+            ]
+        }
+    ]
+}
