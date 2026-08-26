@@ -18,7 +18,9 @@ node -e "const fs=require('fs');const p=require('./package.json');p.version='$VE
 sed -i -E "s/^version = \"[^\"]+\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
 
-bun run tauri build -- --bundles nsis --runner cargo-xwin --target x86_64-pc-windows-msvc
+# Invoke the Tauri CLI directly: `bun run … -- …` forwards the flags to Cargo
+# after the runner has been selected, rather than to Tauri itself.
+./node_modules/.bin/tauri build --bundles nsis --runner cargo-xwin --target x86_64-pc-windows-msvc
 INSTALLER="$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -type f -name '*.exe' -print -quit)"
 install -d -m 755 "$RELEASE_DIR"
 install -m 644 "$INSTALLER" "$RELEASE_DIR/LogiComms-${VERSION}-x64-setup.exe"
