@@ -1,0 +1,18 @@
+[Unit]
+Description=LogiComms GitHub webhook release builder
+After=network.target
+
+[Service]
+WorkingDirectory=/home/services/logicomms
+Environment=NODE_ENV=production
+Environment=WEBHOOK_PORT=3010
+Environment=GITHUB_WEBHOOK_BRANCH=refs/heads/main
+Environment=PATH=/root/.cargo/bin:/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/home/services/logicomms/.webhook.env
+ExecStart=/root/.bun/bin/bun ops/deploy-webhook.mjs
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
