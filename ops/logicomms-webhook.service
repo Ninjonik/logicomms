@@ -1,0 +1,19 @@
+[Unit]
+Description=LogiComms GitHub webhook deploy listener
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/services/logicomms
+Environment=NODE_ENV=production
+Environment=WEBHOOK_PORT=3010
+Environment=GITHUB_WEBHOOK_BRANCH=refs/heads/main
+EnvironmentFile=/home/services/logicomms/.webhook.env
+Environment=PATH=/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/root/.bun/bin/bun ops/deploy-webhook.mjs
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

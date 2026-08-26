@@ -1,18 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { config } from "./config.mjs";
 
 const schemaPath = path.resolve(import.meta.dirname, "..", "schema.sql");
 const schema = fs.readFileSync(schemaPath, "utf8");
 
-export const db = new Database(config.dbPath);
-db.pragma("journal_mode = WAL");
+export const db = new DatabaseSync(config.dbPath);
+db.exec("PRAGMA journal_mode = WAL;");
 db.exec(schema);
 
 const statements = {
   createSession: db.prepare(
-    "INSERT INTO sessions (id, code, participant_count) VALUES (@id, @code, @participant_count)"
+    "INSERT INTO sessions (id, code, participant_count) VALUES (?, ?, ?)"
   ),
   decrementParticipantCount: db.prepare(
     "UPDATE sessions SET participant_count = MAX(participant_count - 1, 0) WHERE code = ?"
@@ -35,16 +35,20 @@ export function listUsedCodes() {
 }
 
 export function createSession(session) {
-  statements.createSession.run(session);
+  statements.createSession.run(
+    session.id,
+    session.code,
+    session.participant_count
+  );
   return session;
 }
 
 export function getSessionByCode(code) {
-  return statements.getSessionByCode.get(code);
+  return statements.getSessionByCode.get(code) ?? null;
 }
 
 export function getSessionById(id) {
-  return statements.getSessionById.get(id);
+  return statements.getSessionById.get(id) ?? null;
 }
 
 export function setParticipantCount(code, count) {

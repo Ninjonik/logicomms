@@ -15,16 +15,7 @@ import {
   RoomEvent,
   Track,
 } from "livekit-client";
-import {
-  AudioLines,
-  Copy,
-  LoaderCircle,
-  LogOut,
-  Mic,
-  Plus,
-  Radio,
-  Users,
-} from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import env from "@/config/env";
@@ -42,8 +33,11 @@ type SessionState = SessionResponse & {
   room: Room;
 };
 
-type GroupTarget = "all" | "command" | "alpha";
-type ShortcutTarget = GroupTarget | `identity:${string}`;
+type ShortcutTarget =
+  | "all"
+  | "reply"
+  | `group:${string}`
+  | `identity:${string}`;
 
 interface WhisperBinding {
   id: string;
@@ -51,10 +45,9 @@ interface WhisperBinding {
   target: ShortcutTarget;
 }
 
-interface LocalProfile {
-  command: boolean;
-  displayName: string;
-  squadAlpha: boolean;
+interface WhisperGroup {
+  id: string;
+  name: string;
 }
 
 interface WhisperState {
@@ -63,12 +56,12 @@ interface WhisperState {
 }
 
 interface ParticipantRow {
+  assignedGroupIds: string[];
   displayName: string;
   id: string;
   identity: string;
   isLocal: boolean;
   isSpeaking: boolean;
-  tags: string[];
 }
 
 interface WhisperControlMessage {
@@ -78,6 +71,11 @@ interface WhisperControlMessage {
   type: "whisper-control";
 }
 
+interface BindingOption {
+  label: string;
+  value: ShortcutTarget;
+}
+
 interface BindingRowProps {
   activeShortcut: string | null;
   binding: WhisperBinding;
@@ -85,14 +83,41 @@ interface BindingRowProps {
   onCapture: (id: string) => void;
   onRemove: (id: string) => void;
   onTargetChange: (id: string, target: ShortcutTarget) => void;
-  targetOptions: { label: string; value: ShortcutTarget }[];
+  targetOptions: BindingOption[];
+}
+
+interface GroupRowProps {
+  group: WhisperGroup;
+  onNameChange: (id: string, value: string) => void;
+  onRemove: (id: string) => void;
+}
+
+interface GroupToggleProps {
+  active: boolean;
+  group: WhisperGroup;
+  onToggle: (groupId: string) => void;
+}
+
+interface ParticipantAssignmentRowProps {
+  groups: WhisperGroup[];
+  onToggleGroup: (participantIdentity: string, groupId: string) => void;
+  participant: ParticipantRow;
 }
 
 const NICKNAME_STORAGE_KEY = "logicomms.nickname";
+const GROUPS_STORAGE_KEY = "logicomms.groups";
+const BINDINGS_STORAGE_KEY = "logicomms.bindings";
+const SESSION_ASSIGNMENTS_STORAGE_KEY = "logicomms.sessionAssignments";
 
-const starterBindings: WhisperBinding[] = [
-  { id: "1", shortcut: "F13", target: "all" },
-  { id: "2", shortcut: "F14", target: "command" },
+const DEFAULT_GROUPS: WhisperGroup[] = [
+  { id: "command", name: "Command" },
+  { id: "alpha", name: "Alpha" },
+];
+
+const DEFAULT_BINDINGS: WhisperBinding[] = [
+  { id: "binding-all", shortcut: "F13", target: "all" },
+  { id: "binding-command", shortcut: "F14", target: "group:command" },
+  { id: "binding-reply", shortcut: "F15", target: "reply" },
 ];
 
 const encoder = new TextEncoder();
@@ -105,9 +130,12 @@ function normalizeAccelerator(event: KeyboardEvent) {
     event.shiftKey ? "Shift" : "",
     event.metaKey ? "Meta" : "",
   ].filter(Boolean);
-
   const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
   return [...modifiers, key].join("+");
+}
+
+function ignorePromise<T>(promise: Promise<T>) {
+  promise.catch(() => undefined);
 }
 
 function buildParticipantLabel(participant: Participant) {
@@ -119,20 +147,6 @@ function buildParticipantLabel(participant: Participant) {
   return participant.name?.trim() || participant.identity;
 }
 
-function getParticipantTags(participant: Participant) {
-  const tags: string[] = [];
-
-  if (participant.attributes.commandNet === "true") {
-    tags.push("Command");
-  }
-
-  if (participant.attributes.squadAlpha === "true") {
-    tags.push("Alpha");
-  }
-
-  return tags;
-}
-
 function deriveParticipants(room: Room) {
   return [
     room.localParticipant,
@@ -140,45 +154,10 @@ function deriveParticipants(room: Room) {
   ];
 }
 
-function buildParticipantRows(participants: Participant[]): ParticipantRow[] {
-  return participants.map((participant) => ({
-    displayName: buildParticipantLabel(participant),
-    id: participant.identity,
-    identity: participant.identity,
-    isLocal: participant.isLocal,
-    isSpeaking: participant.isSpeaking,
-    tags: getParticipantTags(participant),
-  }));
-}
-
 function isRemoteParticipant(
   participant: Participant
 ): participant is RemoteParticipant {
   return !participant.isLocal;
-}
-
-function shouldHearTarget(
-  target: ShortcutTarget,
-  listenerIdentity: string,
-  profile: LocalProfile
-) {
-  if (target === "all") {
-    return true;
-  }
-
-  if (target === "command") {
-    return profile.command;
-  }
-
-  if (target === "alpha") {
-    return profile.squadAlpha;
-  }
-
-  if (target.startsWith("identity:")) {
-    return target.slice("identity:".length) === listenerIdentity;
-  }
-
-  return false;
 }
 
 function parseWhisperMessage(
@@ -196,16 +175,77 @@ function parseWhisperMessage(
   }
 }
 
-function readStoredNickname() {
+function readStorage<T>(key: string, fallback: T) {
   if (typeof window === "undefined") {
-    return "";
+    return fallback;
   }
 
-  return localStorage.getItem(NICKNAME_STORAGE_KEY) ?? "";
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return fallback;
+    }
+
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
 }
 
-function ignorePromise<T>(promise: Promise<T>) {
-  promise.catch(() => undefined);
+function sanitizeGroupName(value: string) {
+  return value.trim().slice(0, 24);
+}
+
+function participantAssignmentKey(sessionCode: string, identity: string) {
+  return `${sessionCode}:${identity}`;
+}
+
+function buildParticipantRows(
+  participants: Participant[],
+  sessionCode: string | null,
+  sessionAssignments: Record<string, string[]>
+) {
+  return participants.map((participant) => ({
+    assignedGroupIds:
+      sessionCode === null
+        ? []
+        : (sessionAssignments[
+            participantAssignmentKey(sessionCode, participant.identity)
+          ] ?? []),
+    displayName: buildParticipantLabel(participant),
+    id: participant.identity,
+    identity: participant.identity,
+    isLocal: participant.isLocal,
+    isSpeaking: participant.isSpeaking,
+  }));
+}
+
+function targetLabel(
+  target: ShortcutTarget,
+  groups: WhisperGroup[],
+  participants: ParticipantRow[]
+) {
+  if (target === "all") {
+    return "All";
+  }
+
+  if (target === "reply") {
+    return "Reply";
+  }
+
+  if (target.startsWith("group:")) {
+    const group = groups.find((candidate) => candidate.id === target.slice(6));
+    return group?.name ?? "Group";
+  }
+
+  if (target.startsWith("identity:")) {
+    const participant = participants.find(
+      (candidate) => candidate.identity === target.slice(9)
+    );
+    return participant?.displayName ?? "Direct";
+  }
+
+  return target;
 }
 
 function BindingRow({
@@ -235,42 +275,125 @@ function BindingRow({
   return (
     <div
       className={cn(
-        "rounded-lg border p-3",
-        activeShortcut === binding.id
-          ? "border-stone-900 bg-stone-100"
-          : "border-stone-200 bg-stone-50"
+        "grid gap-2 border px-2 py-2 sm:grid-cols-[120px_minmax(0,1fr)_72px]",
+        activeShortcut === binding.id ? "bg-muted" : "bg-background"
       )}
     >
-      <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_100px]">
-        <button
-          className="rounded-lg border border-stone-300 border-dashed bg-white px-3 py-2.5 text-left text-sm text-stone-900"
-          onClick={handleCapture}
-          type="button"
-        >
-          {captureId === binding.id
-            ? "Press any key..."
-            : binding.shortcut || "Unassigned"}
-        </button>
+      <button
+        className="border px-2 py-1 text-left text-xs"
+        onClick={handleCapture}
+        type="button"
+      >
+        {captureId === binding.id ? "press key" : binding.shortcut || "unset"}
+      </button>
 
-        <select
-          className="rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-stone-400"
-          onChange={handleTargetChange}
-          value={binding.target}
-        >
-          {targetOptions.map((target) => (
-            <option key={target.value} value={target.value}>
-              {target.label}
-            </option>
-          ))}
-        </select>
+      <select
+        className="border px-2 py-1 text-xs"
+        onChange={handleTargetChange}
+        value={binding.target}
+      >
+        {targetOptions.map((target) => (
+          <option key={target.value} value={target.value}>
+            {target.label}
+          </option>
+        ))}
+      </select>
 
-        <Button
-          className="border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
-          onClick={handleRemove}
-          variant="outline"
-        >
-          Remove
-        </Button>
+      <Button
+        className="h-auto px-2 py-1 text-xs"
+        onClick={handleRemove}
+        variant="outline"
+      >
+        remove
+      </Button>
+    </div>
+  );
+}
+
+function GroupRow({ group, onNameChange, onRemove }: GroupRowProps) {
+  const handleNameChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onNameChange(group.id, event.target.value);
+    },
+    [group.id, onNameChange]
+  );
+
+  const handleRemove = useCallback(() => {
+    onRemove(group.id);
+  }, [group.id, onRemove]);
+
+  return (
+    <div className="grid gap-2 border px-2 py-2 sm:grid-cols-[minmax(0,1fr)_72px]">
+      <input
+        className="border px-2 py-1 text-xs"
+        onChange={handleNameChange}
+        value={group.name}
+      />
+      <Button
+        className="h-auto px-2 py-1 text-xs"
+        onClick={handleRemove}
+        variant="outline"
+      >
+        remove
+      </Button>
+    </div>
+  );
+}
+
+function GroupToggle({ active, group, onToggle }: GroupToggleProps) {
+  const handleClick = useCallback(() => {
+    onToggle(group.id);
+  }, [group.id, onToggle]);
+
+  return (
+    <button
+      className={cn(
+        "border px-2 py-1 text-xs",
+        active ? "bg-foreground text-background" : "bg-background"
+      )}
+      onClick={handleClick}
+      type="button"
+    >
+      {group.name}
+    </button>
+  );
+}
+
+function ParticipantAssignmentRow({
+  groups,
+  participant,
+  onToggleGroup,
+}: ParticipantAssignmentRowProps) {
+  const handleToggleGroup = useCallback(
+    (groupId: string) => {
+      onToggleGroup(participant.identity, groupId);
+    },
+    [onToggleGroup, participant.identity]
+  );
+
+  return (
+    <div className="space-y-2 border px-2 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs">{participant.displayName}</div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {participant.identity}
+          </div>
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {participant.isSpeaking ? "speaking" : ""}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {groups.map((group) => (
+          <GroupToggle
+            active={participant.assignedGroupIds.includes(group.id)}
+            group={group}
+            key={group.id}
+            onToggle={handleToggleGroup}
+          />
+        ))}
       </div>
     </div>
   );
@@ -282,9 +405,7 @@ async function requestSession(
 ) {
   const response = await fetch(`${env.API_URL}${path}`, {
     body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     method: "POST",
   });
 
@@ -303,28 +424,30 @@ async function requestSession(
 export function HomePage() {
   const [joinCode, setJoinCode] = useState("");
   const [callsign, setCallsign] = useState("");
-  const [status, setStatus] = useState("Ready.");
+  const [status, setStatus] = useState("ready");
   const [isBusy, setIsBusy] = useState(false);
   const [session, setSession] = useState<SessionState | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [bindings, setBindings] = useState(starterBindings);
+  const [groups, setGroups] = useState<WhisperGroup[]>(DEFAULT_GROUPS);
+  const [bindings, setBindings] = useState<WhisperBinding[]>(DEFAULT_BINDINGS);
   const [captureId, setCaptureId] = useState<string | null>(null);
   const [activeShortcut, setActiveShortcut] = useState<string | null>(null);
-  const [profile, setProfile] = useState<LocalProfile>({
-    command: true,
-    displayName: "",
-    squadAlpha: false,
-  });
+  const [newGroupName, setNewGroupName] = useState("");
+  const [sessionAssignments, setSessionAssignments] = useState<
+    Record<string, string[]>
+  >({});
+  const [lastSpeakerIdentity, setLastSpeakerIdentity] = useState<string | null>(
+    null
+  );
   const audioTrackRef = useRef<LocalAudioTrack | null>(null);
   const micPublicationRef = useRef<LocalTrackPublication | null>(null);
   const whisperStateRef = useRef<Map<string, WhisperState>>(new Map());
 
   useEffect(() => {
-    const stored = readStoredNickname();
-    if (stored) {
-      setCallsign(stored);
-      setProfile((current) => ({ ...current, displayName: stored }));
-    }
+    setCallsign(readStorage(NICKNAME_STORAGE_KEY, ""));
+    setGroups(readStorage(GROUPS_STORAGE_KEY, DEFAULT_GROUPS));
+    setBindings(readStorage(BINDINGS_STORAGE_KEY, DEFAULT_BINDINGS));
+    setSessionAssignments(readStorage(SESSION_ASSIGNMENTS_STORAGE_KEY, {}));
   }, []);
 
   useEffect(() => {
@@ -333,7 +456,13 @@ export function HomePage() {
     }
 
     localStorage.setItem(NICKNAME_STORAGE_KEY, callsign);
-  }, [callsign]);
+    localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
+    localStorage.setItem(BINDINGS_STORAGE_KEY, JSON.stringify(bindings));
+    localStorage.setItem(
+      SESSION_ASSIGNMENTS_STORAGE_KEY,
+      JSON.stringify(sessionAssignments)
+    );
+  }, [bindings, callsign, groups, sessionAssignments]);
 
   useEffect(() => {
     if (!captureId) {
@@ -356,6 +485,47 @@ export function HomePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [captureId]);
 
+  const participantRows = useMemo(
+    () =>
+      buildParticipantRows(
+        participants,
+        session?.sessionCode ?? null,
+        sessionAssignments
+      ),
+    [participants, session?.sessionCode, sessionAssignments]
+  );
+
+  const targetMatchesListener = useCallback(
+    (target: ShortcutTarget, listenerIdentity: string) => {
+      if (target === "all") {
+        return true;
+      }
+
+      if (target === "reply") {
+        return listenerIdentity === lastSpeakerIdentity;
+      }
+
+      if (target.startsWith("identity:")) {
+        return target.slice(9) === listenerIdentity;
+      }
+
+      if (target.startsWith("group:")) {
+        if (!session) {
+          return false;
+        }
+
+        const key = participantAssignmentKey(
+          session.sessionCode,
+          listenerIdentity
+        );
+        return (sessionAssignments[key] ?? []).includes(target.slice(6));
+      }
+
+      return false;
+    },
+    [lastSpeakerIdentity, session, sessionAssignments]
+  );
+
   const applyAudioRouting = useCallback(
     (room: Room, participantList = deriveParticipants(room)) => {
       const listenerIdentity = room.localParticipant.identity;
@@ -368,12 +538,12 @@ export function HomePage() {
         const whisperState = whisperStateRef.current.get(participant.identity);
         const shouldHear =
           whisperState?.active === true &&
-          shouldHearTarget(whisperState.target, listenerIdentity, profile);
+          targetMatchesListener(whisperState.target, listenerIdentity);
 
         participant.setVolume(shouldHear ? 1 : 0, Track.Source.Microphone);
       }
     },
-    [profile]
+    [targetMatchesListener]
   );
 
   const syncParticipantState = useCallback(
@@ -384,6 +554,23 @@ export function HomePage() {
     },
     [applyAudioRouting]
   );
+
+  const ensurePublishedMic = useCallback(async (room: Room) => {
+    if (audioTrackRef.current === null) {
+      audioTrackRef.current = await createLocalAudioTrack();
+    }
+
+    if (micPublicationRef.current === null) {
+      micPublicationRef.current = await room.localParticipant.publishTrack(
+        audioTrackRef.current,
+        {
+          name: "whisper-mic",
+          source: Track.Source.Microphone,
+        }
+      );
+      await micPublicationRef.current.mute();
+    }
+  }, []);
 
   const broadcastWhisperState = useCallback(
     async (target: ShortcutTarget, active: boolean) => {
@@ -409,22 +596,63 @@ export function HomePage() {
     [session]
   );
 
-  const ensurePublishedMic = useCallback(async (room: Room) => {
-    if (audioTrackRef.current === null) {
-      audioTrackRef.current = await createLocalAudioTrack();
-    }
+  const resolveTarget = useCallback(
+    (target: ShortcutTarget) => {
+      if (target !== "reply") {
+        return target;
+      }
 
-    if (micPublicationRef.current === null) {
-      micPublicationRef.current = await room.localParticipant.publishTrack(
-        audioTrackRef.current,
-        {
-          name: "whisper-mic",
-          source: Track.Source.Microphone,
-        }
-      );
+      if (lastSpeakerIdentity) {
+        return `identity:${lastSpeakerIdentity}` as ShortcutTarget;
+      }
+
+      return "all";
+    },
+    [lastSpeakerIdentity]
+  );
+
+  const startWhisper = useCallback(
+    async (target: ShortcutTarget) => {
+      if (!session) {
+        return;
+      }
+
+      const resolvedTarget = resolveTarget(target);
+      await ensurePublishedMic(session.room);
+      whisperStateRef.current.set(session.identity, {
+        active: true,
+        target: resolvedTarget,
+      });
+      await micPublicationRef.current?.unmute();
+      await broadcastWhisperState(resolvedTarget, true);
+      syncParticipantState(session.room);
+    },
+    [
+      broadcastWhisperState,
+      ensurePublishedMic,
+      resolveTarget,
+      session,
+      syncParticipantState,
+    ]
+  );
+
+  const stopWhisper = useCallback(
+    async (target: ShortcutTarget) => {
+      if (!(session && micPublicationRef.current)) {
+        return;
+      }
+
+      const resolvedTarget = resolveTarget(target);
+      whisperStateRef.current.set(session.identity, {
+        active: false,
+        target: resolvedTarget,
+      });
       await micPublicationRef.current.mute();
-    }
-  }, []);
+      await broadcastWhisperState(resolvedTarget, false);
+      syncParticipantState(session.room);
+    },
+    [broadcastWhisperState, resolveTarget, session, syncParticipantState]
+  );
 
   useEffect(() => {
     if (!session) {
@@ -432,15 +660,12 @@ export function HomePage() {
     }
 
     const { room } = session;
-    const updateParticipants = () => {
-      syncParticipantState(room);
-    };
 
-    const updateConnectionState = (state: ConnectionState) => {
+    const handleConnectionStateChanged = (state: ConnectionState) => {
       setStatus(
         state === ConnectionState.Connected
-          ? `Connected to ${session.sessionCode}.`
-          : `Connection state: ${state}`
+          ? `connected ${session.sessionCode}`
+          : `state ${state}`
       );
     };
 
@@ -471,57 +696,55 @@ export function HomePage() {
       syncParticipantState(room);
     };
 
-    room.on(RoomEvent.ParticipantConnected, updateParticipants);
-    room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
-    room.on(RoomEvent.ActiveSpeakersChanged, updateParticipants);
-    room.on(RoomEvent.ConnectionStateChanged, updateConnectionState);
-    room.on(RoomEvent.ParticipantAttributesChanged, updateParticipants);
-    room.on(RoomEvent.TrackSubscribed, updateParticipants);
-    room.on(RoomEvent.TrackUnsubscribed, updateParticipants);
+    const handleActiveSpeakersChanged = (activeSpeakers: Participant[]) => {
+      const remoteSpeaker = activeSpeakers.find(
+        (participant) => !participant.isLocal
+      );
+      if (remoteSpeaker) {
+        setLastSpeakerIdentity(remoteSpeaker.identity);
+      }
+
+      syncParticipantState(room);
+    };
+
+    const handleParticipantChange = () => {
+      syncParticipantState(room);
+    };
+
+    room.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
+    room.on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
     room.on(RoomEvent.DataReceived, handleDataReceived);
+    room.on(RoomEvent.ParticipantAttributesChanged, handleParticipantChange);
+    room.on(RoomEvent.ParticipantConnected, handleParticipantChange);
+    room.on(RoomEvent.ParticipantDisconnected, handleParticipantChange);
+    room.on(RoomEvent.TrackSubscribed, handleParticipantChange);
+    room.on(RoomEvent.TrackUnsubscribed, handleParticipantChange);
 
     syncParticipantState(room);
+
     return () => {
-      room.off(RoomEvent.ParticipantConnected, updateParticipants);
-      room.off(RoomEvent.ParticipantDisconnected, updateParticipants);
-      room.off(RoomEvent.ActiveSpeakersChanged, updateParticipants);
-      room.off(RoomEvent.ConnectionStateChanged, updateConnectionState);
-      room.off(RoomEvent.ParticipantAttributesChanged, updateParticipants);
-      room.off(RoomEvent.TrackSubscribed, updateParticipants);
-      room.off(RoomEvent.TrackUnsubscribed, updateParticipants);
+      room.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
+      room.off(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
       room.off(RoomEvent.DataReceived, handleDataReceived);
+      room.off(RoomEvent.ParticipantAttributesChanged, handleParticipantChange);
+      room.off(RoomEvent.ParticipantConnected, handleParticipantChange);
+      room.off(RoomEvent.ParticipantDisconnected, handleParticipantChange);
+      room.off(RoomEvent.TrackSubscribed, handleParticipantChange);
+      room.off(RoomEvent.TrackUnsubscribed, handleParticipantChange);
     };
   }, [session, syncParticipantState]);
 
-  const startWhisper = useCallback(
-    async (target: ShortcutTarget) => {
-      if (!session) {
-        return;
-      }
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
 
-      await ensurePublishedMic(session.room);
-
-      whisperStateRef.current.set(session.identity, { active: true, target });
-      await micPublicationRef.current.unmute();
-      await broadcastWhisperState(target, true);
-      syncParticipantState(session.room);
-    },
-    [broadcastWhisperState, ensurePublishedMic, session, syncParticipantState]
-  );
-
-  const stopWhisper = useCallback(
-    async (target: ShortcutTarget) => {
-      if (!(session && micPublicationRef.current)) {
-        return;
-      }
-
-      whisperStateRef.current.set(session.identity, { active: false, target });
-      await micPublicationRef.current.mute();
-      await broadcastWhisperState(target, false);
-      syncParticipantState(session.room);
-    },
-    [broadcastWhisperState, session, syncParticipantState]
-  );
+    ignorePromise(
+      session.room.localParticipant.setAttributes({
+        callsign,
+      })
+    );
+  }, [callsign, session]);
 
   useEffect(() => {
     if (!session) {
@@ -531,30 +754,30 @@ export function HomePage() {
     let cancelled = false;
 
     const syncBindings = async () => {
+      const nextBindings = bindings.filter((binding) => binding.shortcut);
+
       await Promise.all(
-        bindings
-          .filter((binding) => binding.shortcut)
-          .map(async (binding) => {
-            if (await isRegistered(binding.shortcut)) {
-              await unregister(binding.shortcut);
+        nextBindings.map(async (binding) => {
+          if (await isRegistered(binding.shortcut)) {
+            await unregister(binding.shortcut);
+          }
+
+          await register(binding.shortcut, async (event) => {
+            if (cancelled) {
+              return;
             }
 
-            await register(binding.shortcut, async (event) => {
-              if (cancelled) {
-                return;
-              }
+            if (event.state === "Pressed") {
+              setActiveShortcut(binding.id);
+              await startWhisper(binding.target);
+            }
 
-              if (event.state === "Pressed") {
-                setActiveShortcut(binding.id);
-                await startWhisper(binding.target);
-              }
-
-              if (event.state === "Released") {
-                setActiveShortcut(null);
-                await stopWhisper(binding.target);
-              }
-            });
-          })
+            if (event.state === "Released") {
+              setActiveShortcut(null);
+              await stopWhisper(binding.target);
+            }
+          });
+        })
       );
     };
 
@@ -562,63 +785,34 @@ export function HomePage() {
 
     return () => {
       cancelled = true;
-      for (const binding of bindings) {
-        if (binding.shortcut) {
-          ignorePromise(unregister(binding.shortcut));
-        }
+      const registeredBindings = bindings.filter((binding) => binding.shortcut);
+      for (const binding of registeredBindings) {
+        ignorePromise(unregister(binding.shortcut));
       }
     };
   }, [bindings, session, startWhisper, stopWhisper]);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    ignorePromise(
-      session.room.localParticipant.setAttributes({
-        callsign: profile.displayName,
-        commandNet: String(profile.command),
-        squadAlpha: String(profile.squadAlpha),
-      })
-    );
-
-    syncParticipantState(session.room);
-  }, [profile, session, syncParticipantState]);
-
   const connectToRoom = useCallback(
     async (payload: SessionResponse) => {
       const room = new Room();
-      setStatus(`Connecting to ${payload.sessionCode}...`);
-
+      setStatus(`connecting ${payload.sessionCode}`);
       await room.connect(payload.livekitUrl, payload.token);
       await ensurePublishedMic(room);
-
-      const nextProfile = {
-        command: true,
-        displayName: payload.displayName,
-        squadAlpha: false,
-      };
-
-      setProfile(nextProfile);
       whisperStateRef.current = new Map();
+      setLastSpeakerIdentity(null);
       setSession({ ...payload, room });
       setParticipants(deriveParticipants(room));
-
       await room.localParticipant.setAttributes({
-        callsign: nextProfile.displayName,
-        commandNet: String(nextProfile.command),
-        squadAlpha: String(nextProfile.squadAlpha),
+        callsign: payload.displayName,
       });
-
-      setStatus(`Connected to ${payload.sessionCode}.`);
+      setStatus(`connected ${payload.sessionCode}`);
     },
     [ensurePublishedMic]
   );
 
   const handleCreateSession = useCallback(async () => {
     setIsBusy(true);
-    setStatus("Creating session...");
+    setStatus("creating");
 
     try {
       const payload = await requestSession("/api/session/create", {
@@ -626,11 +820,8 @@ export function HomePage() {
       });
       await navigator.clipboard.writeText(payload.sessionCode);
       await connectToRoom(payload);
-      setStatus(`Session ${payload.sessionCode} created and copied.`);
     } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "Failed to create session."
-      );
+      setStatus(error instanceof Error ? error.message : "create failed");
     } finally {
       setIsBusy(false);
     }
@@ -638,7 +829,7 @@ export function HomePage() {
 
   const handleJoinSession = useCallback(async () => {
     setIsBusy(true);
-    setStatus("Joining session...");
+    setStatus("joining");
 
     try {
       const payload = await requestSession("/api/session/join", {
@@ -647,99 +838,35 @@ export function HomePage() {
       });
       await connectToRoom(payload);
     } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "Failed to join session."
-      );
+      setStatus(error instanceof Error ? error.message : "join failed");
     } finally {
       setIsBusy(false);
     }
   }, [callsign, connectToRoom, joinCode]);
 
   const disconnect = useCallback(async () => {
-    if (session) {
+    const activeSession = session;
+    if (activeSession) {
       await Promise.all(
         bindings
           .filter((binding) => binding.shortcut)
           .map((binding) => unregister(binding.shortcut).catch(() => undefined))
       );
 
-      await micPublicationRef.current.mute().catch(() => undefined);
-
-      session.room.disconnect();
+      await micPublicationRef.current?.mute().catch(() => undefined);
+      activeSession.room.disconnect();
     }
 
     micPublicationRef.current = null;
     whisperStateRef.current = new Map();
-    setSession(null);
-    setParticipants([]);
-    setStatus("Disconnected.");
     setActiveShortcut(null);
+    setLastSpeakerIdentity(null);
+    setParticipants([]);
+    setSession(null);
+    setStatus("disconnected");
   }, [bindings, session]);
 
-  const participantRows = useMemo(
-    () => buildParticipantRows(participants),
-    [participants]
-  );
-
-  const targetOptions = useMemo(() => {
-    const options = [
-      { label: "Broadcast / All Hands", value: "all" as ShortcutTarget },
-      { label: "Command Net", value: "command" as ShortcutTarget },
-      { label: "Squad Alpha", value: "alpha" as ShortcutTarget },
-    ];
-
-    for (const participant of participantRows) {
-      if (participant.isLocal) {
-        continue;
-      }
-
-      options.push({
-        label: participant.displayName,
-        value: `identity:${participant.identity}` as ShortcutTarget,
-      });
-    }
-
-    return options;
-  }, [participantRows]);
-
-  const whisperSummary = activeShortcut
-    ? (bindings.find((binding) => binding.id === activeShortcut)?.target ??
-      "all")
-    : "idle";
-
-  const sessionReady = session !== null;
-
-  const statCards = [
-    { label: "Status", value: sessionReady ? "Connected" : "Offline" },
-    { label: "Push-to-talk", value: whisperSummary },
-    { label: "Participants", value: String(participantRows.length) },
-  ];
-
-  const handleCopySessionCode = useCallback(() => {
-    if (!session) {
-      return;
-    }
-
-    ignorePromise(navigator.clipboard.writeText(session.sessionCode));
-  }, [session]);
-
-  const handleDisconnect = useCallback(() => {
-    ignorePromise(disconnect());
-  }, [disconnect]);
-
-  const handleProfileCallsignChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const { value } = event.target;
-      setCallsign(value);
-      setProfile((current) => ({
-        ...current,
-        displayName: value,
-      }));
-    },
-    []
-  );
-
-  const handleLandingCallsignChange = useCallback(
+  const handleCallsignChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       setCallsign(event.target.value);
     },
@@ -753,19 +880,12 @@ export function HomePage() {
     []
   );
 
-  const handleToggleCommand = useCallback(() => {
-    setProfile((current) => ({
-      ...current,
-      command: !current.command,
-    }));
-  }, []);
-
-  const handleToggleAlpha = useCallback(() => {
-    setProfile((current) => ({
-      ...current,
-      squadAlpha: !current.squadAlpha,
-    }));
-  }, []);
+  const handleNewGroupNameChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setNewGroupName(event.target.value);
+    },
+    []
+  );
 
   const handleJoinClick = useCallback(() => {
     ignorePromise(handleJoinSession());
@@ -774,6 +894,18 @@ export function HomePage() {
   const handleCreateClick = useCallback(() => {
     ignorePromise(handleCreateSession());
   }, [handleCreateSession]);
+
+  const handleDisconnectClick = useCallback(() => {
+    ignorePromise(disconnect());
+  }, [disconnect]);
+
+  const handleCopyCodeClick = useCallback(() => {
+    if (!session) {
+      return;
+    }
+
+    ignorePromise(navigator.clipboard.writeText(session.sessionCode));
+  }, [session]);
 
   const handleAddBinding = useCallback(() => {
     setBindings((current) => [
@@ -807,208 +939,220 @@ export function HomePage() {
     []
   );
 
-  return (
-    <main className="min-h-screen bg-stone-100 text-stone-900">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
-        <header className="border-stone-200 border-b pb-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-1">
-              <p className="font-medium text-stone-500 text-xs uppercase tracking-[0.18em]">
-                LogiComms
-              </p>
-              <h1 className="font-semibold text-2xl text-stone-950">
-                {session
-                  ? `Session ${session.sessionCode}`
-                  : "Voice session control"}
-              </h1>
-              <p className="text-sm text-stone-600">{status}</p>
-            </div>
+  const handleAddGroup = useCallback(() => {
+    const name = sanitizeGroupName(newGroupName);
+    if (!name) {
+      return;
+    }
 
-            {session ? (
-              <div className="flex flex-col gap-2 sm:flex-row">
+    setGroups((current) => [
+      ...current,
+      { id: globalThis.crypto.randomUUID(), name },
+    ]);
+    setNewGroupName("");
+  }, [newGroupName]);
+
+  const handleGroupNameChange = useCallback((id: string, value: string) => {
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === id
+          ? { ...group, name: sanitizeGroupName(value) || group.name }
+          : group
+      )
+    );
+  }, []);
+
+  const handleRemoveGroup = useCallback((id: string) => {
+    setGroups((current) => current.filter((group) => group.id !== id));
+    setBindings((current) =>
+      current.map((binding) =>
+        binding.target === `group:${id}`
+          ? { ...binding, target: "all" }
+          : binding
+      )
+    );
+    setSessionAssignments((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([key, value]) => [
+          key,
+          value.filter((candidate) => candidate !== id),
+        ])
+      )
+    );
+  }, []);
+
+  const handleToggleParticipantGroup = useCallback(
+    (participantIdentity: string, groupId: string) => {
+      if (!session) {
+        return;
+      }
+
+      const key = participantAssignmentKey(
+        session.sessionCode,
+        participantIdentity
+      );
+      setSessionAssignments((current) => {
+        const currentGroups = current[key] ?? [];
+        const nextGroups = currentGroups.includes(groupId)
+          ? currentGroups.filter((candidate) => candidate !== groupId)
+          : [...currentGroups, groupId];
+
+        return {
+          ...current,
+          [key]: nextGroups,
+        };
+      });
+    },
+    [session]
+  );
+
+  const targetOptions = useMemo(() => {
+    const options: BindingOption[] = [
+      { label: "all", value: "all" },
+      { label: "reply", value: "reply" },
+    ];
+
+    for (const group of groups) {
+      options.push({
+        label: `group:${group.name}`,
+        value: `group:${group.id}`,
+      });
+    }
+
+    for (const participant of participantRows) {
+      if (participant.isLocal) {
+        continue;
+      }
+
+      options.push({
+        label: `user:${participant.displayName}`,
+        value: `identity:${participant.identity}`,
+      });
+    }
+
+    return options;
+  }, [groups, participantRows]);
+
+  const activeTargetLabel = useMemo(() => {
+    const activeBinding = bindings.find(
+      (binding) => binding.id === activeShortcut
+    );
+    if (!activeBinding) {
+      return "idle";
+    }
+
+    return targetLabel(activeBinding.target, groups, participantRows);
+  }, [activeShortcut, bindings, groups, participantRows]);
+
+  const remoteParticipants = useMemo(
+    () => participantRows.filter((participant) => !participant.isLocal),
+    [participantRows]
+  );
+
+  const sessionPanel = session ? (
+    <div className="grid gap-2">
+      <div className="border px-2 py-2 text-xs">
+        <div>{session.sessionCode}</div>
+        <div className="text-muted-foreground">{session.identity}</div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button
+          className="h-auto px-2 py-1 text-xs"
+          onClick={handleCopyCodeClick}
+          variant="outline"
+        >
+          copy code
+        </Button>
+        <Button
+          className="h-auto px-2 py-1 text-xs"
+          onClick={handleDisconnectClick}
+        >
+          disconnect
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <div className="grid gap-2">
+      <input
+        className="border px-2 py-1 text-xs"
+        onChange={handleJoinCodeChange}
+        placeholder="session code"
+        value={joinCode}
+      />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button
+          className="h-auto px-2 py-1 text-xs"
+          disabled={
+            isBusy ||
+            joinCode.trim().length === 0 ||
+            callsign.trim().length === 0
+          }
+          onClick={handleJoinClick}
+        >
+          {isBusy ? <LoaderCircle className="size-3 animate-spin" /> : "join"}
+        </Button>
+        <Button
+          className="h-auto px-2 py-1 text-xs"
+          disabled={isBusy || callsign.trim().length === 0}
+          onClick={handleCreateClick}
+          variant="outline"
+        >
+          {isBusy ? <LoaderCircle className="size-3 animate-spin" /> : "create"}
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto grid max-w-6xl gap-3 px-3 py-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="space-y-3 border p-3">
+          <div className="space-y-1">
+            <div className="text-xs">LogiComms</div>
+            <div className="text-[11px] text-muted-foreground">{status}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[11px] text-muted-foreground">nickname</div>
+            <input
+              className="w-full border px-2 py-1 text-xs"
+              onChange={handleCallsignChange}
+              value={callsign}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[11px] text-muted-foreground">session</div>
+            {sessionPanel}
+          </div>
+
+          <div className="space-y-1 border-t pt-3">
+            <div className="text-[11px] text-muted-foreground">state</div>
+            <div className="text-xs">active target: {activeTargetLabel}</div>
+            <div className="text-xs">
+              last speaker: {lastSpeakerIdentity ?? "-"}
+            </div>
+            <div className="text-xs">
+              participants: {participantRows.length}
+            </div>
+          </div>
+        </aside>
+
+        <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-3">
+            <section className="space-y-2 border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs">bindings</div>
                 <Button
-                  className="border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
-                  onClick={handleCopySessionCode}
+                  className="h-auto px-2 py-1 text-xs"
+                  onClick={handleAddBinding}
                   variant="outline"
                 >
-                  <Copy />
-                  Copy code
-                </Button>
-                <Button
-                  className="bg-stone-900 text-white hover:bg-stone-800"
-                  onClick={handleDisconnect}
-                >
-                  <LogOut />
-                  Disconnect
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </header>
-
-        <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-          <section className="space-y-6">
-            {session ? (
-              <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 border-stone-200 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold text-base text-stone-950">
-                      Profile
-                    </h2>
-                    <p className="text-sm text-stone-600">
-                      This name and routing preference update live for this
-                      device.
-                    </p>
-                  </div>
-                  <p className="text-sm text-stone-500">{session.identity}</p>
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <label className="block space-y-2">
-                    <span className="font-medium text-sm text-stone-700">
-                      Display name
-                    </span>
-                    <input
-                      className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-stone-400"
-                      onChange={handleProfileCallsignChange}
-                      placeholder="Commander_A"
-                      value={callsign}
-                    />
-                  </label>
-
-                  <div className="grid gap-2 sm:grid-cols-2 md:min-w-72">
-                    <button
-                      className={cn(
-                        "rounded-lg border px-4 py-2.5 text-left text-sm transition",
-                        profile.command
-                          ? "border-stone-900 bg-stone-900 text-white"
-                          : "border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
-                      )}
-                      onClick={handleToggleCommand}
-                      type="button"
-                    >
-                      Command net
-                    </button>
-                    <button
-                      className={cn(
-                        "rounded-lg border px-4 py-2.5 text-left text-sm transition",
-                        profile.squadAlpha
-                          ? "border-stone-900 bg-stone-900 text-white"
-                          : "border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
-                      )}
-                      onClick={handleToggleAlpha}
-                      type="button"
-                    >
-                      Squad alpha
-                    </button>
-                  </div>
-                </div>
-              </section>
-            ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-                  <div className="space-y-1">
-                    <h2 className="font-semibold text-base text-stone-950">
-                      Start here
-                    </h2>
-                    <p className="text-sm text-stone-600">
-                      Enter a name, then join an existing session or create a
-                      new one.
-                    </p>
-                  </div>
-
-                  <div className="mt-5 space-y-4">
-                    <label className="block space-y-2">
-                      <span className="font-medium text-sm text-stone-700">
-                        Display name
-                      </span>
-                      <input
-                        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-stone-400"
-                        onChange={handleLandingCallsignChange}
-                        placeholder="Commander_A"
-                        value={callsign}
-                      />
-                    </label>
-
-                    <p className="text-stone-500 text-xs">
-                      Saved locally on this device.
-                    </p>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="block space-y-2">
-                        <span className="font-medium text-sm text-stone-700">
-                          Session code
-                        </span>
-                        <input
-                          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 lowercase tracking-[0.12em] outline-none transition focus:border-stone-400"
-                          onChange={handleJoinCodeChange}
-                          placeholder="falcon"
-                          value={joinCode}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Button
-                        className="bg-stone-900 text-white hover:bg-stone-800"
-                        disabled={
-                          isBusy ||
-                          joinCode.trim().length === 0 ||
-                          callsign.trim().length === 0
-                        }
-                        onClick={handleJoinClick}
-                      >
-                        {isBusy ? (
-                          <LoaderCircle className="size-4 animate-spin" />
-                        ) : (
-                          <Radio />
-                        )}
-                        Join
-                      </Button>
-                      <Button
-                        className="border-stone-300 bg-white text-stone-800 hover:bg-stone-50"
-                        disabled={isBusy || callsign.trim().length === 0}
-                        onClick={handleCreateClick}
-                        variant="outline"
-                      >
-                        {isBusy ? (
-                          <LoaderCircle className="size-4 animate-spin" />
-                        ) : (
-                          <Plus />
-                        )}
-                        Create
-                      </Button>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            )}
-
-            <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 border-stone-200 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="font-semibold text-base text-stone-950">
-                    Push-to-talk bindings
-                  </h2>
-                  <p className="text-sm text-stone-600">
-                    Hold the assigned key to transmit. Release to mute.
-                  </p>
-                </div>
-                <Button
-                  className="bg-stone-900 text-white hover:bg-stone-800"
-                  onClick={handleAddBinding}
-                  size="sm"
-                >
-                  <Plus />
-                  Add binding
+                  add
                 </Button>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="space-y-2">
                 {bindings.map((binding) => (
                   <BindingRow
                     activeShortcut={activeShortcut}
@@ -1023,84 +1167,100 @@ export function HomePage() {
                 ))}
               </div>
             </section>
-          </section>
 
-          <aside className="space-y-6">
-            <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Mic className="size-4 text-stone-500" />
-                <h2 className="font-semibold text-base text-stone-950">
-                  Session overview
-                </h2>
+            <section className="space-y-2 border p-3">
+              <div className="text-xs">groups</div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_72px]">
+                <input
+                  className="border px-2 py-1 text-xs"
+                  onChange={handleNewGroupNameChange}
+                  value={newGroupName}
+                />
+                <Button
+                  className="h-auto px-2 py-1 text-xs"
+                  onClick={handleAddGroup}
+                  variant="outline"
+                >
+                  add
+                </Button>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                {statCards.map((card) => (
-                  <div
-                    className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3"
-                    key={card.label}
-                  >
-                    <p className="font-medium text-stone-500 text-xs uppercase tracking-[0.14em]">
-                      {card.label}
-                    </p>
-                    <p className="mt-2 font-medium text-sm text-stone-900">
-                      {card.value}
-                    </p>
-                  </div>
+              <div className="space-y-2">
+                {groups.map((group) => (
+                  <GroupRow
+                    group={group}
+                    key={group.id}
+                    onNameChange={handleGroupNameChange}
+                    onRemove={handleRemoveGroup}
+                  />
                 ))}
-              </div>
-
-              <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-                Run the packaged Windows client as Administrator if protected
-                games block global shortcuts.
               </div>
             </section>
 
-            <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Users className="size-4 text-stone-500" />
-                <h2 className="font-semibold text-base text-stone-950">
-                  Participants
-                </h2>
-              </div>
+            <section className="space-y-2 border p-3">
+              <div className="text-xs">participant group assignment</div>
+              {session ? (
+                <div className="space-y-2">
+                  {remoteParticipants.map((participant) => (
+                    <ParticipantAssignmentRow
+                      groups={groups}
+                      key={participant.id}
+                      onToggleGroup={handleToggleParticipantGroup}
+                      participant={participant}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[11px] text-muted-foreground">
+                  join a session to assign users
+                </div>
+              )}
+            </section>
+          </div>
 
-              <div className="mt-4 space-y-2">
+          <aside className="space-y-3">
+            <section className="space-y-2 border p-3">
+              <div className="text-xs">participants</div>
+              <div className="space-y-2">
                 {participantRows.length > 0 ? (
                   participantRows.map((participant) => (
                     <div
-                      className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3"
+                      className="border px-2 py-2 text-xs"
                       key={participant.id}
                     >
-                      <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-stone-400" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate font-medium text-sm text-stone-900">
-                            {participant.displayName}
-                          </p>
-                          {participant.isSpeaking ? (
-                            <AudioLines className="size-3.5 text-stone-700" />
-                          ) : null}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate">
+                          {participant.displayName}
                         </div>
-                        <p className="truncate text-stone-500 text-xs">
-                          {participant.isLocal ? "You" : participant.identity}
-                        </p>
-                        {participant.tags.length > 0 ? (
-                          <p className="mt-1 text-stone-600 text-xs">
-                            {participant.tags.join(" / ")}
-                          </p>
-                        ) : null}
+                        <div className="text-[11px] text-muted-foreground">
+                          {participant.isSpeaking ? "speaking" : ""}
+                        </div>
                       </div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {participant.isLocal ? "you" : participant.identity}
+                      </div>
+                      {participant.assignedGroupIds.length > 0 ? (
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {participant.assignedGroupIds
+                            .map(
+                              (groupId) =>
+                                groups.find((group) => group.id === groupId)
+                                  ?.name ?? groupId
+                            )
+                            .join(", ")}
+                        </div>
+                      ) : null}
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-stone-500">
-                    No participants connected yet.
-                  </p>
+                  <div className="text-[11px] text-muted-foreground">
+                    no participants
+                  </div>
                 )}
               </div>
             </section>
           </aside>
-        </div>
+        </section>
       </div>
     </main>
   );

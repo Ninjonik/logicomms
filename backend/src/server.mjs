@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import { v4 as uuid } from "uuid";
@@ -21,9 +23,15 @@ import {
 import { pickUnusedWord } from "./word-pool.mjs";
 
 const app = express();
+const releaseManifestDirectory = config.releaseManifestPath
+  ? path.dirname(config.releaseManifestPath)
+  : null;
 
 app.use(cors());
 app.use(express.json());
+if (releaseManifestDirectory) {
+  app.use("/downloads", express.static(releaseManifestDirectory));
+}
 
 function randomIdentity(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -44,8 +52,101 @@ function buildSessionPayload(sessionCode, token, identity, displayName) {
   };
 }
 
+function readReleaseManifest() {
+  try {
+    const payload = fs.readFileSync(config.releaseManifestPath, "utf8");
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function compareVersions(left, right) {
+  const normalize = (value) =>
+    String(value)
+      .split("+")[0]
+      .split("-")[0]
+      .split(".")
+      .map((part) => Number.parseInt(part, 10) || 0);
+
+  const leftParts = normalize(left);
+  const rightParts = normalize(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+
+  return 0;
+}
+
+function buildDynamicManifest(manifest, target, arch) {
+  const platformKey = `${target}-${arch}`;
+  const platform = manifest?.platforms?.[platformKey];
+
+  if (!(manifest?.version && platform?.url && platform?.signature)) {
+    return null;
+  }
+
+  return {
+    notes: manifest.notes ?? "",
+    platforms: {
+      [platformKey]: {
+        signature: platform.signature,
+        url: platform.url,
+      },
+    },
+    pub_date: manifest.pub_date ?? new Date().toISOString(),
+    version: manifest.version,
+  };
+}
+
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
+});
+
+app.get("/api/version", (_request, response) => {
+  const manifest = readReleaseManifest();
+
+  response.json({
+    releaseBaseUrl: config.releaseBaseUrl,
+    updater: manifest,
+  });
+});
+
+app.get("/api/updates/latest.json", (_request, response) => {
+  const manifest = readReleaseManifest();
+  if (!manifest) {
+    response.status(404).json({ error: "No release manifest available." });
+    return;
+  }
+
+  response.json(manifest);
+});
+
+app.get("/api/updates/:target/:arch/:currentVersion", (request, response) => {
+  const manifest = readReleaseManifest();
+  if (!manifest) {
+    response.status(404).json({ error: "No release manifest available." });
+    return;
+  }
+
+  const { arch, currentVersion, target } = request.params;
+  if (compareVersions(manifest.version, currentVersion) <= 0) {
+    response.status(204).end();
+    return;
+  }
+
+  const dynamicManifest = buildDynamicManifest(manifest, target, arch);
+  if (!dynamicManifest) {
+    response.status(404).json({ error: "No matching platform artifact." });
+    return;
+  }
+
+  response.json(dynamicManifest);
 });
 
 app.post("/api/session/create", async (_request, response) => {

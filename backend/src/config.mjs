@@ -11,6 +11,12 @@ export const config = {
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   livekitUrl: process.env.LIVEKIT_URL ?? "",
   livekitWebhookSecret: process.env.LIVEKIT_WEBHOOK_SECRET ?? "",
+  releaseBaseUrl:
+    process.env.LOGICOMMS_RELEASE_BASE_URL ??
+    "https://logicomms.igportals.eu/downloads",
+  releaseManifestPath:
+    process.env.LOGICOMMS_RELEASE_MANIFEST_PATH ??
+    path.join(backendRoot, "releases", "latest.json"),
 };
 
 export function requireLiveKitConfig() {
