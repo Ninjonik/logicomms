@@ -3,6 +3,7 @@ import { Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from
 import { isTauri } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { disable, enable } from '@tauri-apps/plugin-autostart';
+import { check } from '@tauri-apps/plugin-updater';
 import { callLobbyApi, ensureAnonymousSession, getCurrentUser } from './lib/appwrite';
 import { VoiceConnection } from './lib/voice';
 import type { VoiceRoute } from './lib/voice';
@@ -83,6 +84,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('logicomms:preferences', JSON.stringify(prefs));
   }, [prefs]);
+
+  // Release builds check the signed Tauri update manifest on startup. On
+  // Windows, installing an update closes the app and the NSIS installer
+  // finishes the update using its passive progress UI.
+  useEffect(() => {
+    if (!isTauri()) return;
+    void check()
+      .then((available) => available?.downloadAndInstall())
+      .catch(() => undefined);
+  }, []);
 
   const refreshDevices = () =>
       void navigator.mediaDevices

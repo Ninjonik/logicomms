@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -34,5 +35,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFRjQ1OTc0RjI2Rjg2MDUKUldRRmhtL3lkRm4wVHA1RGtQVzdsOE9yWnJ6NzhSNDZwRUEzM0M2VEpJWVpISXdITFFyL0U1SEcK",
+      "endpoints": [
+        "https://logicomms.igportals.eu/releases/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
