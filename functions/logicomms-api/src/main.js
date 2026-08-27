@@ -1,4 +1,4 @@
-import { Client, ID, Query, TablesDB } from 'node-appwrite';
+import { Client, ID, Permission, Query, Role, TablesDB } from 'node-appwrite';
 import { AccessToken } from 'livekit-server-sdk';
 
 const DATABASE_ID = 'logicomms';
@@ -11,6 +11,7 @@ const NOUNS = ['anchor', 'badger', 'beacon', 'cedar', 'comet', 'falcon', 'forest
 const now = () => new Date().toISOString();
 const normalizeCode = (value) => String(value ?? '').trim().toLowerCase();
 const randomCode = () => `${ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]}${NOUNS[Math.floor(Math.random() * NOUNS.length)]}`;
+const lobbyReadPermissions = [Permission.read(Role.any())];
 
 function lobbyCode(value) {
   const code = normalizeCode(value);
@@ -79,7 +80,7 @@ async function createLobby(tables, actorId, body) {
     if (await getLobby(tables, code)) throw new Error('That lobby name is already taken.');
     const timestamp = now();
     try {
-      await tables.createRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { ownerId: actorId, roomName: code, lastActiveAt: timestamp } });
+      await tables.createRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { ownerId: actorId, roomName: code, lastActiveAt: timestamp }, permissions: lobbyReadPermissions });
     } catch (caught) {
       if (caught.code === 409) throw new Error('That lobby name is already taken.');
       throw caught;
@@ -95,7 +96,7 @@ async function createLobby(tables, actorId, body) {
   }
   if (!code) throw new Error('Could not reserve a lobby name. Please try again.');
   const timestamp = now();
-  await tables.createRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { ownerId: actorId, roomName: code, lastActiveAt: timestamp } });
+  await tables.createRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { ownerId: actorId, roomName: code, lastActiveAt: timestamp }, permissions: lobbyReadPermissions });
   await tables.createRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: ID.unique(), data: { lobbyId: code, userId: actorId, nickname: displayName, livekitIdentity: `u_${actorId}`, lastSeenAt: timestamp } });
   return lobbyState(tables, code);
 }
@@ -109,7 +110,7 @@ async function joinLobby(tables, actorId, body) {
   const data = { lobbyId: code, userId: actorId, nickname: displayName, livekitIdentity: `u_${actorId}`, lastSeenAt: now() };
   if (existing) await tables.updateRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: existing.$id, data });
   else await tables.createRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: ID.unique(), data });
-  await tables.updateRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { lastActiveAt: now() } });
+  await tables.updateRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { lastActiveAt: now() }, permissions: lobbyReadPermissions });
   return lobbyState(tables, code);
 }
 

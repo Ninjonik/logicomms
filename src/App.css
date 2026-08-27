@@ -426,14 +426,18 @@ button {
   border-radius: 3px;
   background: #191a1d88;
 }
+.overlay-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 .overlay-name {
-  display: block;
+  white-space: nowrap;
 }
 .overlay-groups {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
-  margin-top: 4px;
 }
 .overlay-group {
   padding: 1px 4px;
@@ -446,6 +450,19 @@ button {
 .overlay-group.active {
   background: #51b96cbb;
   color: #fff;
+}
+.overlay-scale-control {
+  position: relative;
+}
+.overlay-scale-control > span {
+  float: right;
+  color: #8f9298;
+}
+.overlay-scale-control input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 6px 0 0;
+  accent-color: #85b875;
 }
 .overlay-person.outgoing {
   background: #3b9b5488;

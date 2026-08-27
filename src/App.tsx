@@ -6,7 +6,9 @@ import { emitTo, listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { disable, enable } from '@tauri-apps/plugin-autostart';
 import { check, type Update } from '@tauri-apps/plugin-updater';
-import { callLobbyApi, ensureAnonymousSession, getCurrentUser } from './lib/appwrite';
+import { LogicalPosition, LogicalSize, currentMonitor } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { callLobbyApi, ensureAnonymousSession, getCurrentUser, subscribeToLobby } from './lib/appwrite';
 import { VoiceConnection } from './lib/voice';
 import type { VoiceRoute } from './lib/voice';
 import { Overlay } from './Overlay';
@@ -16,6 +18,7 @@ type Member = { userId: string; nickname: string; livekitIdentity: string; lastS
 type Lobby = { code: string; ownerId: string; roomName: string; members: Member[] };
 type VoiceCredentials = { url: string; room: string; token: string; expiresInSeconds: number };
 type Group = { id: string; name: string; key: string; members: string[] };
+type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type Preferences = {
   nickname: string;
   input: string;
@@ -25,6 +28,8 @@ type Preferences = {
   replyKey: string;
   launchAtLogin: boolean;
   autoUpdate: boolean;
+  overlayPosition: OverlayPosition;
+  overlayScale: number;
 };
 type Device = { deviceId: string; label: string };
 
@@ -36,6 +41,8 @@ const initial: Preferences = {
   replyKey: 'R',
   launchAtLogin: false,
   autoUpdate: true,
+  overlayPosition: 'top-left',
+  overlayScale: 100,
   groups: [],
 };
 
@@ -233,6 +240,47 @@ export default function App() {
     }, 15_000);
     return () => window.clearInterval(timer);
   }, [lobby?.code, prefs.nickname]);
+
+  // Realtime updates make joins/leaves visible immediately. The heartbeat is
+  // still retained above solely to expire abandoned lobby memberships.
+  useEffect(() => {
+    if (!lobby) return;
+    let refreshQueued = false;
+    const refresh = () => {
+      if (refreshQueued) return;
+      refreshQueued = true;
+      window.setTimeout(() => {
+        refreshQueued = false;
+        void callLobbyApi<Lobby>({ action: 'getLobby', code: lobby.code })
+            .then((nextLobby) => {
+              if (nextLobby) setLobby(nextLobby);
+            })
+            .catch(() => undefined);
+      }, 0);
+    };
+    return subscribeToLobby(lobby.code, refresh);
+  }, [lobby?.code]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const applyOverlayLayout = async () => {
+      const overlay = await WebviewWindow.getByLabel('overlay');
+      const monitor = await currentMonitor();
+      if (!overlay || !monitor) return;
+      const scale = Math.max(0.75, Math.min(1.5, prefs.overlayScale / 100));
+      const size = new LogicalSize(240 * scale, 360 * scale);
+      const workAreaPosition = monitor.workArea.position.toLogical(monitor.scaleFactor);
+      const workAreaSize = monitor.workArea.size.toLogical(monitor.scaleFactor);
+      const margin = 12;
+      const right = workAreaPosition.x + workAreaSize.width - size.width - margin;
+      const bottom = workAreaPosition.y + workAreaSize.height - size.height - margin;
+      const x = prefs.overlayPosition.endsWith('right') ? right : workAreaPosition.x + margin;
+      const y = prefs.overlayPosition.startsWith('bottom') ? bottom : workAreaPosition.y + margin;
+      await overlay.setSize(size);
+      await overlay.setPosition(new LogicalPosition(x, y));
+    };
+    void applyOverlayLayout().catch(() => undefined);
+  }, [prefs.overlayPosition, prefs.overlayScale]);
 
   // Push-to-talk key bindings.
   //
@@ -698,6 +746,29 @@ export default function App() {
                     onChange={(event) => update({ autoUpdate: event.target.checked })}
                 />{' '}
                 Automatically check for updates on launch
+              </label>
+              <label>
+                Overlay position
+                <select
+                    value={prefs.overlayPosition}
+                    onChange={(event) => update({ overlayPosition: event.target.value as OverlayPosition })}
+                >
+                  <option value="top-left">Top left</option>
+                  <option value="top-right">Top right</option>
+                  <option value="bottom-left">Bottom left</option>
+                  <option value="bottom-right">Bottom right</option>
+                </select>
+              </label>
+              <label className="overlay-scale-control">
+                Overlay size <span>{prefs.overlayScale}%</span>
+                <input
+                    type="range"
+                    min="75"
+                    max="150"
+                    step="5"
+                    value={prefs.overlayScale}
+                    onChange={(event) => update({ overlayScale: Number(event.target.value) })}
+                />
               </label>
             </aside>
         )}

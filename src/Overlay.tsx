@@ -27,14 +27,16 @@ export function Overlay() {
         const incoming = state.incoming.includes(person.id);
         return (
           <div className={`overlay-person${outgoing ? ' outgoing' : ''}${incoming ? ' incoming' : ''}`} key={person.id}>
-            <span className="overlay-name">{person.nickname}</span>
-            {person.groups.length > 0 && (
-              <span className="overlay-groups">
+            <span className="overlay-row">
+              <span className="overlay-name">{person.nickname}</span>
+              {person.groups.length > 0 && (
+                <span className="overlay-groups">
                 {person.groups.map((group) => (
                   <span className={`overlay-group${state.activeGroups.includes(group.id) ? ' active' : ''}`} key={group.id}>{group.name}</span>
                 ))}
-              </span>
-            )}
+                </span>
+              )}
+            </span>
           </div>
         );
       })}
