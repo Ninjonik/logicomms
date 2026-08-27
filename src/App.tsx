@@ -69,6 +69,7 @@ export default function App() {
   if (window.location.hash === '#overlay') return <Overlay />;
   const [prefs, setPrefs] = useState(loadPreferences);
   const [code, setCode] = useState('');
+  const [newLobbyCode, setNewLobbyCode] = useState('');
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [transmitting, setTransmitting] = useState<string[]>([]);
   const [incomingTalkers, setIncomingTalkers] = useState<string[]>([]);
@@ -278,7 +279,7 @@ export default function App() {
     if (!prefs.nickname.trim()) return setStatus('Choose a nickname first.');
     setBusy(true);
     try {
-      setLobby(await callLobbyApi<Lobby>({ action: 'createLobby', nickname: prefs.nickname }));
+      setLobby(await callLobbyApi<Lobby>({ action: 'createLobby', nickname: prefs.nickname, code: newLobbyCode }));
       setStatus('Connected');
     } catch (caught) {
       setStatus((caught as Error).message);
@@ -346,14 +347,23 @@ export default function App() {
   useEffect(() => {
     if (!isTauri()) return;
     const publish = () => void emitTo('overlay', 'overlay-state', {
-      people: (lobby?.members ?? []).filter((member) => member.userId !== userId).map((member) => ({ id: member.userId, nickname: member.nickname })),
+      people: (lobby?.members ?? [])
+          .filter((member) => member.userId !== userId)
+          .map((member) => ({
+            id: member.userId,
+            nickname: member.nickname,
+            groups: prefs.groups
+                .filter((group) => group.members.includes(member.userId))
+                .map((group) => ({ id: group.id, name: group.name })),
+          })),
       outgoing: [...outgoingTargets],
       incoming: incomingTalkers,
+      activeGroups: transmitting,
     }).catch(() => undefined);
     publish();
     const timer = window.setInterval(publish, 1000);
     return () => window.clearInterval(timer);
-  }, [incomingTalkers, lobby, outgoingTargets, userId]);
+  }, [incomingTalkers, lobby, outgoingTargets, prefs.groups, transmitting, userId]);
 
   const addGroup = (openEditor = false) => {
     const id = crypto.randomUUID();
@@ -426,11 +436,20 @@ export default function App() {
         {!joined ? (
             <section className="welcome">
               <h1>Lobby</h1>
-              <p>Enter a two-word lobby name, or create one.</p>
-              <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="silver-harbor" />
+              <p>Join a lobby by its single-word name, or create one.</p>
+              <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="swiftfalcon" />
               <button className="primary" disabled={busy} onClick={() => void join()}>
                 Join lobby
               </button>
+              <label className="create-lobby-code">
+                Custom lobby name <small>optional</small>
+                <input
+                    value={newLobbyCode}
+                    maxLength={32}
+                    onChange={(event) => setNewLobbyCode(event.target.value.toLowerCase())}
+                    placeholder="myfriends"
+                />
+              </label>
               <button className="quiet" disabled={busy} onClick={() => void create()}>
                 Create lobby
               </button>

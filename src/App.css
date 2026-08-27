@@ -148,6 +148,15 @@ button {
   border: 1px solid #56585c;
   border-radius: 2px;
 }
+.create-lobby-code {
+  display: block;
+  margin-top: 14px;
+  color: #b9bbc0;
+  font-size: 11px;
+}
+.create-lobby-code small {
+  color: #777a80;
+}
 .primary,
 .quiet {
   width: 100%;
@@ -402,6 +411,27 @@ button {
   padding: 6px 10px;
   border-radius: 3px;
   background: #191a1d88;
+}
+.overlay-name {
+  display: block;
+}
+.overlay-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+.overlay-group {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: #6d717755;
+  color: #d7d9dc;
+  font-size: 9px;
+  line-height: 13px;
+}
+.overlay-group.active {
+  background: #51b96cbb;
+  color: #fff;
 }
 .overlay-person.outgoing {
   background: #3b9b5488;

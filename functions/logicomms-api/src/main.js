@@ -10,7 +10,13 @@ const NOUNS = ['anchor', 'badger', 'beacon', 'cedar', 'comet', 'falcon', 'forest
 
 const now = () => new Date().toISOString();
 const normalizeCode = (value) => String(value ?? '').trim().toLowerCase();
-const randomCode = () => `${ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]}-${NOUNS[Math.floor(Math.random() * NOUNS.length)]}`;
+const randomCode = () => `${ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]}${NOUNS[Math.floor(Math.random() * NOUNS.length)]}`;
+
+function lobbyCode(value) {
+  const code = normalizeCode(value);
+  if (!/^[a-z0-9]{3,32}$/.test(code)) throw new Error('Lobby names must be one word using 3–32 letters or numbers.');
+  return code;
+}
 
 function requestBody(req) {
   if (!req.body) return {};
@@ -67,6 +73,21 @@ async function lobbyState(tables, lobbyId) {
 
 async function createLobby(tables, actorId, body) {
   const displayName = nickname(body.nickname);
+  const requestedCode = normalizeCode(body.code);
+  if (requestedCode) {
+    const code = lobbyCode(requestedCode);
+    if (await getLobby(tables, code)) throw new Error('That lobby name is already taken.');
+    const timestamp = now();
+    try {
+      await tables.createRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { ownerId: actorId, roomName: code, lastActiveAt: timestamp } });
+    } catch (caught) {
+      if (caught.code === 409) throw new Error('That lobby name is already taken.');
+      throw caught;
+    }
+    await tables.createRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: ID.unique(), data: { lobbyId: code, userId: actorId, nickname: displayName, livekitIdentity: `u_${actorId}`, lastSeenAt: timestamp } });
+    return lobbyState(tables, code);
+  }
+
   let code;
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const candidate = randomCode();
@@ -80,7 +101,7 @@ async function createLobby(tables, actorId, body) {
 }
 
 async function joinLobby(tables, actorId, body) {
-  const code = normalizeCode(body.code);
+  const code = lobbyCode(body.code);
   const displayName = nickname(body.nickname);
   if (!code) throw new Error('Enter a lobby name.');
   if (!(await getLobby(tables, code))) throw new Error('That lobby no longer exists.');
@@ -93,8 +114,7 @@ async function joinLobby(tables, actorId, body) {
 }
 
 async function leaveLobby(tables, actorId, body) {
-  const code = normalizeCode(body.code);
-  if (!code) throw new Error('Enter a lobby name.');
+  const code = lobbyCode(body.code);
   const members = await listMembers(tables, code);
   await Promise.all(members.filter((member) => member.userId === actorId).map((member) => tables.deleteRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: member.$id })));
   if ((await listMembers(tables, code)).length === 0 && (await getLobby(tables, code))) await tables.deleteRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code });
@@ -102,7 +122,7 @@ async function leaveLobby(tables, actorId, body) {
 }
 
 async function issueLiveKitToken(tables, actorId, body) {
-  const code = normalizeCode(body.code);
+  const code = lobbyCode(body.code);
   const member = (await listMembers(tables, code)).find((entry) => entry.userId === actorId);
   if (!member) throw new Error('Join the lobby before connecting voice.');
   if (!process.env.LIVEKIT_URL || !process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET) throw new Error('Voice server is not configured.');
