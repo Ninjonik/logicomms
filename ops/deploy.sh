@@ -11,6 +11,12 @@ test -r "$SIGNING_KEY_PATH"
 export TAURI_SIGNING_PRIVATE_KEY="$(<"$SIGNING_KEY_PATH")"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 
+# Webhook deliveries may overlap. They all use this working tree and Tauri's
+# target directory, so serialize them to prevent version files/artifacts from
+# being mixed between builds.
+exec 9>/var/lock/logicomms-release-build.lock
+flock 9
+
 cd "$APP_DIR"
 git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
@@ -32,7 +38,9 @@ printf 'Building signed Tauri release: config=%s cargo=%s\n' "$CONFIG_VERSION" "
 # Invoke the Tauri CLI directly: `bun run … -- …` forwards the flags to Cargo
 # after the runner has been selected, rather than to Tauri itself.
 ./node_modules/.bin/tauri build --bundles nsis --runner cargo-xwin --target x86_64-pc-windows-msvc
-INSTALLER="$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -type f -name '*.exe' -print -quit)"
+BUNDLE_DIR="src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+INSTALLER="$BUNDLE_DIR/LogiComms_${VERSION}_x64-setup.exe"
+test -f "$INSTALLER"
 SIGNATURE="${INSTALLER}.sig"
 test -f "$SIGNATURE"
 install -d -m 755 "$RELEASE_DIR"
