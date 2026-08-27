@@ -3,6 +3,7 @@ import { Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from
 import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { emitTo, listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { disable, enable } from '@tauri-apps/plugin-autostart';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { callLobbyApi, ensureAnonymousSession, getCurrentUser } from './lib/appwrite';
@@ -104,6 +105,7 @@ export default function App() {
     if (!availableUpdate) return;
     setStatus(`Installing v${availableUpdate.version}…`);
     try {
+      await invoke('allow_update_exit');
       await availableUpdate.downloadAndInstall();
     } catch {
       setStatus('Update installation failed');

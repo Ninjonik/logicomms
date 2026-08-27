@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -8,6 +9,16 @@ use tauri::{window::Color, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, W
 struct PttKeyEvent {
     key: String,
     pressed: bool,
+}
+
+// The normal close button minimizes LogiComms to the tray. Before a Tauri
+// update installs, the frontend explicitly flips this flag so the NSIS
+// installer can close and replace the running executable.
+static EXIT_FOR_UPDATE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn allow_update_exit() {
+    EXIT_FOR_UPDATE.store(true, Ordering::SeqCst);
 }
 
 // Converts an rdev::Key into the same uppercase single-character / named
@@ -126,10 +137,14 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if EXIT_FOR_UPDATE.load(Ordering::SeqCst) {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }
         })
+        .invoke_handler(tauri::generate_handler![allow_update_exit])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
