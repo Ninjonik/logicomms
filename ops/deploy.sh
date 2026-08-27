@@ -23,6 +23,11 @@ trap 'git checkout -- package.json src-tauri/Cargo.toml src-tauri/tauri.conf.jso
 node -e "const fs=require('fs');const p=require('./package.json');p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')"
 sed -i -E "s/^version = \"[^\"]+\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+CONFIG_VERSION="$(node -e "console.log(require('./src-tauri/tauri.conf.json').version)")"
+CARGO_VERSION="$(sed -n -E 's/^version = \"([^\"]+)\"/\1/p' src-tauri/Cargo.toml | head -n 1)"
+test "$CONFIG_VERSION" = "$VERSION"
+test "$CARGO_VERSION" = "$VERSION"
+printf 'Building signed Tauri release: config=%s cargo=%s\n' "$CONFIG_VERSION" "$CARGO_VERSION"
 
 # Invoke the Tauri CLI directly: `bun run … -- …` forwards the flags to Cargo
 # after the runner has been selected, rather than to Tauri itself.
