@@ -12,6 +12,7 @@ EnvironmentFile=/home/services/logicomms/.webhook.env
 ExecStart=/root/.bun/bin/bun ops/deploy-webhook.mjs
 Restart=always
 RestartSec=5
+LimitNOFILE=65536
 User=root
 
 [Install]
