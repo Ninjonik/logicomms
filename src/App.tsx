@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from 'lucide-react';
+import { Check, Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -18,12 +18,16 @@ type Member = { userId: string; nickname: string; livekitIdentity: string; lastS
 type Lobby = { code: string; ownerId: string; roomName: string; members: Member[] };
 type VoiceCredentials = { url: string; room: string; token: string; expiresInSeconds: number };
 type Group = { id: string; name: string; key: string; members: string[] };
+// Groups are deliberately local preferences.  Keep a tiny address book beside
+// them so a member can still be edited after they have left the lobby.
+type KnownPerson = { userId: string; nickname: string };
 type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type Preferences = {
   nickname: string;
   input: string;
   output: string;
   groups: Group[];
+  people: KnownPerson[];
   allKey: string;
   replyKey: string;
   launchAtLogin: boolean;
@@ -44,6 +48,7 @@ const initial: Preferences = {
   overlayPosition: 'top-left',
   overlayScale: 100,
   groups: [],
+  people: [],
 };
 
 const loadPreferences = (): Preferences => {
@@ -51,6 +56,7 @@ const loadPreferences = (): Preferences => {
     const saved = { ...initial, ...JSON.parse(localStorage.getItem('logicomms:preferences') ?? '{}') };
     return {
       ...saved,
+      people: Array.isArray(saved.people) ? saved.people : [],
       input: saved.input.startsWith('Default') ? 'default' : saved.input,
       output: saved.output.startsWith('Default') ? 'default' : saved.output,
     };
@@ -102,6 +108,29 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('logicomms:preferences', JSON.stringify(prefs));
   }, [prefs]);
+
+  // A lobby is only the live presence list.  Add everyone we meet to local
+  // preferences, but never remove them here: assignments must remain
+  // adjustable after somebody disconnects.
+  useEffect(() => {
+    if (!lobby || !userId) return;
+    const connectedPeople = lobby.members
+        .filter((member) => member.userId !== userId)
+        .map(({ userId: memberId, nickname }) => ({ userId: memberId, nickname }));
+    if (connectedPeople.length === 0) return;
+    setPrefs((current) => {
+      const peopleById = new Map(current.people.map((person) => [person.userId, person]));
+      let changed = false;
+      for (const person of connectedPeople) {
+        const previous = peopleById.get(person.userId);
+        if (!previous || previous.nickname !== person.nickname) {
+          peopleById.set(person.userId, person);
+          changed = true;
+        }
+      }
+      return changed ? { ...current, people: [...peopleById.values()] } : current;
+    });
+  }, [lobby?.members, userId]);
 
   useEffect(() => {
     if (isTauri()) void getVersion().then(setAppVersion).catch(() => undefined);
@@ -415,6 +444,19 @@ export default function App() {
       [incomingTalkers, lobby],
   );
 
+  const knownPeople = useMemo(() => {
+    const peopleById = new Map(prefs.people.map((person) => [person.userId, person]));
+    // Preserve memberships created before this address book existed too.
+    prefs.groups.flatMap((group) => group.members).forEach((memberId) => {
+      if (!peopleById.has(memberId)) peopleById.set(memberId, { userId: memberId, nickname: 'Previously assigned person' });
+    });
+    const connectedIds = new Set(lobby?.members.filter((member) => member.userId !== userId).map((member) => member.userId));
+    return [...peopleById.values()].sort((a, b) => {
+      const connectionOrder = Number(connectedIds.has(b.userId)) - Number(connectedIds.has(a.userId));
+      return connectionOrder || a.nickname.localeCompare(b.nickname);
+    });
+  }, [lobby?.members, prefs.groups, prefs.people, userId]);
+
   useEffect(() => {
     if (!isTauri()) return;
     const publish = () => void emitTo('overlay', 'overlay-state', {
@@ -610,13 +652,14 @@ export default function App() {
                         </div>
                         {editingGroup === group.id && (
                             <div className="group-members">
-                              <label>
-                                Group name
-                                <input
-                                  value={group.name}
-                                  onChange={(event) => update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, name: event.target.value } : entry) })}
-                                />
-                              </label>
+                              <div className="group-details">
+                                <label>
+                                  Group name
+                                  <input
+                                    value={group.name}
+                                    onChange={(event) => update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, name: event.target.value } : entry) })}
+                                  />
+                                </label>
                               <button
                                 id={`hotkey-${group.id}`}
                                 className="binding"
@@ -625,32 +668,43 @@ export default function App() {
                               >
                                 <span>Hotkey</span>
                                 <Key>{capturing === group.id ? 'â€¦' : group.key || 'â€”'}</Key>
-                              </button>
-                              {lobby.members
-                                  .filter((member) => member.userId !== userId)
-                                  .map((member) => (
-                                      <label key={member.userId}>
-                                        <input
-                                            type="checkbox"
-                                            checked={group.members.includes(member.userId)}
-                                            onChange={() =>
-                                                update({
-                                                  groups: prefs.groups.map((entry) =>
-                                                      entry.id === group.id
-                                                          ? {
-                                                            ...entry,
-                                                            members: entry.members.includes(member.userId)
-                                                                ? entry.members.filter((id) => id !== member.userId)
-                                                                : [...entry.members, member.userId],
-                                                          }
-                                                          : entry,
-                                                  ),
-                                                })
-                                            }
-                                        />
-                                        {member.nickname}
-                                      </label>
-                                  ))}
+                                </button>
+                              </div>
+                              <div className="group-member-heading">
+                                <span>People</span>
+                                <small>Saved locally — connected people appear first</small>
+                              </div>
+                              <div className="group-person-list">
+                                {knownPeople.length === 0 ? (
+                                    <p className="empty-group">People you meet in a lobby will stay available here.</p>
+                                ) : knownPeople.map((person) => {
+                                  const connected = lobby?.members.some((member) => member.userId === person.userId);
+                                  const selected = group.members.includes(person.userId);
+                                  return (
+                                      <button
+                                          type="button"
+                                          className={`group-person${selected ? ' selected' : ''}`}
+                                          aria-pressed={selected}
+                                          key={person.userId}
+                                          onClick={() => update({
+                                            groups: prefs.groups.map((entry) => entry.id !== group.id ? entry : {
+                                              ...entry,
+                                              members: selected
+                                                  ? entry.members.filter((id) => id !== person.userId)
+                                                  : [...entry.members, person.userId],
+                                            }),
+                                          })}
+                                      >
+                                        <span className="avatar">{person.nickname.slice(0, 1)}</span>
+                                        <span className="group-person-copy">
+                                          <strong>{person.nickname}</strong>
+                                          <small className={connected ? 'online' : ''}>{connected ? 'In this lobby' : 'Saved person'}</small>
+                                        </span>
+                                        <span className="assignment-state">{selected ? <><Check size={14} /> Added</> : 'Add'}</span>
+                                      </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                         )}
                       </div>

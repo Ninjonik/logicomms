@@ -310,20 +310,107 @@ button {
 .group-members {
   background: #242528;
   border-bottom: 1px solid #3a3b3f;
-  padding: 6px 8px;
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
+  padding: 9px 8px 8px;
 }
-.group-members label {
+.group-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 8px;
+  align-items: end;
+}
+.group-details label {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: 3px;
   color: #c7c9cc;
   font-size: 11px;
 }
-.group-members input {
-  accent-color: #aeb1b4;
+.group-details input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #56585c;
+  border-radius: 2px;
+  background: #202124;
+  color: #eef0f1;
+}
+.group-member-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 11px 1px 5px;
+  color: #d3d5d8;
+  font-size: 11px;
+  font-weight: 600;
+}
+.group-member-heading small {
+  color: #85888d;
+  font-size: 10px;
+  font-weight: 400;
+  text-align: right;
+}
+.group-person-list {
+  display: grid;
+  gap: 4px;
+}
+.group-person {
+  width: 100%;
+  min-height: 38px;
+  padding: 5px 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #404247;
+  border-radius: 3px;
+  background: #292a2d;
+  color: #d8dadd;
+  text-align: left;
+}
+.group-person:hover {
+  border-color: #62656a;
+  background: #303135;
+}
+.group-person.selected {
+  border-color: #4d8a5d;
+  background: #203426;
+}
+.group-person-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.group-person-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+}
+.group-person-copy small {
+  color: #85888d;
+  font-size: 10px;
+}
+.group-person-copy small.online {
+  color: #8cdf9d;
+}
+.assignment-state {
+  min-width: 42px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: #aeb1b5;
+  font-size: 10px;
+}
+.selected .assignment-state {
+  color: #9cdda9;
+}
+.empty-group {
+  margin: 3px 0;
+  color: #8d9095;
+  font-size: 11px;
 }
 .key {
   min-width: 24px;
