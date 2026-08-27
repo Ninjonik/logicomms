@@ -42,7 +42,7 @@ VERSION="$VERSION" RELEASE_DIR="$RELEASE_DIR" SIGNATURE="$(tr -d '\r\n' < "$SIGN
     notes: `Automated LogiComms release ${version}`,
     pub_date: new Date().toISOString(),
     platforms: { "windows-x86_64": { url: `${base}/${name}`, signature: process.env.SIGNATURE } }
-  }, null, 2) + "\\n");
+  }, null, 2) + "\n");
 '
 printf '%s\n' "<html><body><h1>LogiComms releases</h1><p>Latest: ${VERSION}</p><p><a href=\"LogiComms-${VERSION}-x64-setup.exe\">Download Windows installer</a></p></body></html>" > "$RELEASE_DIR/index.html"
 printf '%s\n' "${VERSION}" > "$RELEASE_DIR/version.txt"
