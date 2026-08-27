@@ -440,9 +440,9 @@ export default function App() {
     };
 
     const down = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement)?.tagName !== 'INPUT' && !event.repeat) change(event.key, true);
+      if ((event.target as HTMLElement)?.tagName !== 'INPUT' && !event.repeat) change(event.code || event.key, true);
     };
-    const up = (event: KeyboardEvent) => change(event.key, false);
+    const up = (event: KeyboardEvent) => change(event.code || event.key, false);
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     // Keep DOM events active in Tauri too. The native listener covers other
@@ -622,8 +622,8 @@ export default function App() {
   const captureKey = (id: string, event: React.KeyboardEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (!capturing) return;
-    const key = event.key === ' ' ? 'SPACE' : event.key.length === 1 ? event.key.toUpperCase() : event.code.replace('Key', '').replace('Digit', '');
-    if (!key || ['Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(event.key)) return;
+    const key = event.code || event.key;
+    if (!key) return;
     if (id === 'all') update({ allKey: key });
     else if (id === 'reply') update({ replyKey: key });
     else update({ groups: prefs.groups.map((group) => (group.id === id ? { ...group, key } : group)) });
@@ -634,8 +634,8 @@ export default function App() {
     if (!capturing) return;
     const assign = (event: KeyboardEvent) => {
       event.preventDefault();
-      const key = event.key === ' ' ? 'SPACE' : event.key.length === 1 ? event.key.toUpperCase() : event.code.replace('Key', '').replace('Digit', '');
-      if (!key || ['Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(event.key)) return;
+      const key = event.code || event.key;
+      if (!key) return;
       if (capturing === 'all') update({ allKey: key });
       else if (capturing === 'reply') update({ replyKey: key });
       else update({ groups: prefs.groups.map((group) => group.id === capturing ? { ...group, key } : group) });

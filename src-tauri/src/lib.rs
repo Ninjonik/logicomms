@@ -21,22 +21,36 @@ fn allow_update_exit() {
     EXIT_FOR_UPDATE.store(true, Ordering::SeqCst);
 }
 
-// Converts an rdev::Key into the same uppercase single-character / named
-// representation the frontend already expects from its old KeyboardEvent
-// based bindings (e.g. "Y", "R", "F1", "SPACE").
+// Convert rdev's physical keys into DOM KeyboardEvent.code names.  Codes are
+// layout-independent: the Czech and Slovak layouts can put a different
+// character on a physical key, but the same physical shortcut still works
+// when the app is unfocused.
 fn key_to_label(key: rdev::Key) -> Option<String> {
     use rdev::Key::*;
     let label = match key {
-        KeyA => "A", KeyB => "B", KeyC => "C", KeyD => "D", KeyE => "E", KeyF => "F",
-        KeyG => "G", KeyH => "H", KeyI => "I", KeyJ => "J", KeyK => "K", KeyL => "L",
-        KeyM => "M", KeyN => "N", KeyO => "O", KeyP => "P", KeyQ => "Q", KeyR => "R",
-        KeyS => "S", KeyT => "T", KeyU => "U", KeyV => "V", KeyW => "W", KeyX => "X",
-        KeyY => "Y", KeyZ => "Z",
-        Num0 => "0", Num1 => "1", Num2 => "2", Num3 => "3", Num4 => "4",
-        Num5 => "5", Num6 => "6", Num7 => "7", Num8 => "8", Num9 => "9",
+        KeyA => "KeyA", KeyB => "KeyB", KeyC => "KeyC", KeyD => "KeyD", KeyE => "KeyE", KeyF => "KeyF",
+        KeyG => "KeyG", KeyH => "KeyH", KeyI => "KeyI", KeyJ => "KeyJ", KeyK => "KeyK", KeyL => "KeyL",
+        KeyM => "KeyM", KeyN => "KeyN", KeyO => "KeyO", KeyP => "KeyP", KeyQ => "KeyQ", KeyR => "KeyR",
+        KeyS => "KeyS", KeyT => "KeyT", KeyU => "KeyU", KeyV => "KeyV", KeyW => "KeyW", KeyX => "KeyX",
+        KeyY => "KeyY", KeyZ => "KeyZ",
+        Num0 => "Digit0", Num1 => "Digit1", Num2 => "Digit2", Num3 => "Digit3", Num4 => "Digit4",
+        Num5 => "Digit5", Num6 => "Digit6", Num7 => "Digit7", Num8 => "Digit8", Num9 => "Digit9",
+        Kp0 => "Numpad0", Kp1 => "Numpad1", Kp2 => "Numpad2", Kp3 => "Numpad3", Kp4 => "Numpad4",
+        Kp5 => "Numpad5", Kp6 => "Numpad6", Kp7 => "Numpad7", Kp8 => "Numpad8", Kp9 => "Numpad9",
         Space => "SPACE",
         F1 => "F1", F2 => "F2", F3 => "F3", F4 => "F4", F5 => "F5", F6 => "F6",
         F7 => "F7", F8 => "F8", F9 => "F9", F10 => "F10", F11 => "F11", F12 => "F12",
+        Alt => "AltLeft", AltGr => "AltRight", ControlLeft => "ControlLeft", ControlRight => "ControlRight",
+        ShiftLeft => "ShiftLeft", ShiftRight => "ShiftRight", MetaLeft => "MetaLeft", MetaRight => "MetaRight",
+        Backspace => "Backspace", CapsLock => "CapsLock", Delete => "Delete", DownArrow => "ArrowDown",
+        End => "End", Escape => "Escape", Home => "Home", LeftArrow => "ArrowLeft", PageDown => "PageDown",
+        PageUp => "PageUp", Return => "Enter", RightArrow => "ArrowRight", Tab => "Tab", UpArrow => "ArrowUp",
+        PrintScreen => "PrintScreen", ScrollLock => "ScrollLock", Pause => "Pause", NumLock => "NumLock", Insert => "Insert",
+        BackQuote => "Backquote", Minus => "Minus", Equal => "Equal", LeftBracket => "BracketLeft", RightBracket => "BracketRight",
+        SemiColon => "Semicolon", Quote => "Quote", BackSlash => "Backslash", IntlBackslash => "IntlBackslash",
+        Comma => "Comma", Dot => "Period", Slash => "Slash",
+        KpReturn => "NumpadEnter", KpMinus => "NumpadSubtract", KpPlus => "NumpadAdd", KpMultiply => "NumpadMultiply",
+        KpDivide => "NumpadDivide", KpDelete => "NumpadDecimal", Function => "Fn",
         _ => return None,
     };
     Some(label.to_string())
