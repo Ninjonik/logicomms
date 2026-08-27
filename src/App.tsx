@@ -27,6 +27,8 @@ type Preferences = {
   nickname: string;
   input: string;
   output: string;
+  inputVolume: number;
+  outputVolume: number;
   groups: Group[];
   people: KnownPerson[];
   allKey: string;
@@ -43,6 +45,8 @@ const initial: Preferences = {
   nickname: '',
   input: 'Default — Microphone',
   output: 'Default — Headphones',
+  inputVolume: 100,
+  outputVolume: 100,
   allKey: 'Y',
   replyKey: 'R',
   launchAtLogin: false,
@@ -54,8 +58,8 @@ const initial: Preferences = {
 };
 
 const translations = {
-  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
-  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
+  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
+  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
 } as const;
 
 const loadPreferences = (): Preferences => {
@@ -64,6 +68,8 @@ const loadPreferences = (): Preferences => {
     return {
       ...saved,
       people: Array.isArray(saved.people) ? saved.people : [],
+      inputVolume: typeof saved.inputVolume === 'number' ? saved.inputVolume : 100,
+      outputVolume: typeof saved.outputVolume === 'number' ? saved.outputVolume : 100,
       input: saved.input.startsWith('Default') ? 'default' : saved.input,
       output: saved.output.startsWith('Default') ? 'default' : saved.output,
     };
@@ -115,8 +121,11 @@ export default function App() {
   const [assigningGroup, setAssigningGroup] = useState<string | null>(null);
   const [devices, setDevices] = useState<{ inputs: Device[]; outputs: Device[] }>({ inputs: [], outputs: [] });
   const [capturing, setCapturing] = useState<string | null>(null);
+  const [testingMicrophone, setTestingMicrophone] = useState(false);
+  const [microphoneLevel, setMicrophoneLevel] = useState(0);
   const voiceRef = useRef<VoiceConnection | null>(null);
   const pressedKeysRef = useRef(new Set<string>());
+  const microphoneTestRef = useRef<{ stream: MediaStream; context: AudioContext; frame: number } | null>(null);
   const joined = lobby !== null;
   const update = (patch: Partial<Preferences>) => setPrefs((value) => ({ ...value, ...patch }));
   const t = translations[prefs.language ?? 'en'];
@@ -195,11 +204,62 @@ export default function App() {
           )
           .catch(() => undefined);
 
+  const stopMicrophoneTest = () => {
+    const test = microphoneTestRef.current;
+    if (test) {
+      cancelAnimationFrame(test.frame);
+      test.stream.getTracks().forEach((track) => track.stop());
+      void test.context.close();
+      microphoneTestRef.current = null;
+    }
+    setTestingMicrophone(false);
+    setMicrophoneLevel(0);
+  };
+
+  const toggleMicrophoneTest = async () => {
+    if (testingMicrophone) return stopMicrophoneTest();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: prefs.input === 'default' ? undefined : { exact: prefs.input } } });
+      const context = new AudioContext();
+      // Chromium/WebView supports routing an AudioContext to a chosen output.
+      // Fall back to the system output when that optional API is unavailable.
+      const sinkContext = context as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+      if (prefs.output !== 'default') await sinkContext.setSinkId?.(prefs.output).catch(() => undefined);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      const monitor = context.createGain();
+      monitor.gain.value = prefs.outputVolume / 100;
+      context.createMediaStreamSource(stream).connect(analyser);
+      analyser.connect(monitor).connect(context.destination);
+      const samples = new Uint8Array(analyser.fftSize);
+      const measure = () => {
+        analyser.getByteTimeDomainData(samples);
+        let total = 0;
+        for (const sample of samples) total += ((sample - 128) / 128) ** 2;
+        setMicrophoneLevel(Math.min(1, Math.sqrt(total / samples.length) * 5));
+        const current = microphoneTestRef.current;
+        if (current) current.frame = requestAnimationFrame(measure);
+      };
+      microphoneTestRef.current = { stream, context, frame: 0 };
+      setTestingMicrophone(true);
+      measure();
+    } catch (caught) {
+      setStatus(`Microphone test unavailable: ${(caught as Error).message}`);
+      stopMicrophoneTest();
+    }
+  };
+
   useEffect(() => {
     refreshDevices();
     navigator.mediaDevices?.addEventListener('devicechange', refreshDevices);
     return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshDevices);
   }, []);
+
+  useEffect(() => () => stopMicrophoneTest(), []);
+
+  useEffect(() => {
+    if (!showSettings) stopMicrophoneTest();
+  }, [showSettings]);
 
   // Windows/WebView permissions are granted per application, not by NSIS
   // during installation. Request the microphone on first app launch and
@@ -268,6 +328,14 @@ export default function App() {
   useEffect(() => {
     void voice?.setOutputDevice(prefs.output);
   }, [voice, prefs.output]);
+
+  useEffect(() => {
+    voice?.setInputVolume(prefs.inputVolume / 100);
+  }, [voice, prefs.inputVolume]);
+
+  useEffect(() => {
+    voice?.setOutputVolume(prefs.outputVolume / 100);
+  }, [voice, prefs.outputVolume]);
 
   useEffect(() => {
     voiceRef.current = voice;
@@ -592,7 +660,10 @@ export default function App() {
                     placeholder="Your name"
                 />
               </label>
-              <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="swiftfalcon" />
+              <label className="main-nickname">
+                {t.lobbyCode}
+                <input value={code} onChange={(event) => setCode(event.target.value)} placeholder={t.lobbyCode} />
+              </label>
               {microphoneMessage && <p className="permission-note">{microphoneMessage}</p>}
               <button className="primary" disabled={busy} onClick={() => void join()}>
                 {t.joinLobby}
@@ -839,6 +910,15 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <label className="volume-control">
+                Microphone volume <span>{prefs.inputVolume}%</span>
+                <input type="range" min="0" max="200" step="5" value={prefs.inputVolume} onChange={(event) => update({ inputVolume: Number(event.target.value) })} />
+              </label>
+              <div className="microphone-test">
+                <div className="microphone-test-heading"><span>{testingMicrophone ? 'Testing microphone now' : 'Test microphone'}</span><span>{Math.round(microphoneLevel * 100)}%</span></div>
+                <div className="microphone-meter" aria-label="Microphone level"><i style={{ transform: `scaleX(${microphoneLevel})` }} /></div>
+                <button className={testingMicrophone ? 'quiet' : 'primary'} onClick={() => void toggleMicrophoneTest()}>{testingMicrophone ? 'Stop test' : 'Test microphone'}</button>
+              </div>
               <label>
                 {t.outputDevice}
                 <select value={prefs.output} onChange={(event) => update({ output: event.target.value })}>
@@ -849,6 +929,10 @@ export default function App() {
                       </option>
                   ))}
                 </select>
+              </label>
+              <label className="volume-control">
+                Speaker volume <span>{prefs.outputVolume}%</span>
+                <input type="range" min="0" max="100" step="5" value={prefs.outputVolume} onChange={(event) => update({ outputVolume: Number(event.target.value) })} />
               </label>
               <div className="binding-list">
                 <button className="binding" onClick={() => addGroup()}>

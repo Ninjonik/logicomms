@@ -10,13 +10,18 @@ export class VoiceConnection {
   private publications = new Map<string, LocalTrackPublication>();
   private routes = new Map<string, VoiceRoute>();
   private source?: MediaStreamTrack;
+  private processedSource?: MediaStreamTrack;
+  private audioContext?: AudioContext;
+  private inputGain?: GainNode;
   private remoteTracks = new Map<string, RemoteAudioTrack>();
+  private remoteElements = new Map<string, HTMLAudioElement>();
   private activeBySender = new Map<string, Set<string>>();
   private selectedBySender = new Map<string, string>();
   private routeByTrack = new Map<string, { sender: string; targeted: boolean }>();
   private lastCaller?: string;
   private inputDeviceId = 'default';
   private outputDeviceId = 'default';
+  private outputVolume = 1;
 
   constructor(
     onState: (state: string) => void,
@@ -33,14 +38,15 @@ export class VoiceConnection {
       const audio = track as RemoteAudioTrack;
       audio.setMuted(true);
       void audio.setSinkId(this.outputDeviceId).catch(() => undefined);
-      const element = audio.attach(); element.autoplay = true; element.style.display = 'none'; document.body.append(element);
+      const element = audio.attach(); element.autoplay = true; element.volume = this.outputVolume; element.style.display = 'none'; document.body.append(element);
+      this.remoteElements.set(publication.trackSid, element);
       this.remoteTracks.set(publication.trackSid, audio);
       this.refreshSender(participant.identity);
     });
     this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
       if (track.kind !== Track.Kind.Audio) return;
       (track as RemoteAudioTrack).detach().forEach((element) => element.remove());
-      this.remoteTracks.delete(publication.trackSid); this.routeByTrack.delete(publication.trackSid); this.refreshSender(participant.identity);
+      this.remoteTracks.delete(publication.trackSid); this.remoteElements.delete(publication.trackSid); this.routeByTrack.delete(publication.trackSid); this.refreshSender(participant.identity);
     });
     this.room.on(RoomEvent.Disconnected, () => onState('Voice disconnected'));
   }
@@ -56,14 +62,23 @@ export class VoiceConnection {
   async configure(routes: VoiceRoute[], inputDeviceId = 'default') {
     if (this.source && this.inputDeviceId !== inputDeviceId) {
       await Promise.all([...this.publications.values()].map((publication) => publication.track ? this.room.localParticipant.unpublishTrack(publication.track) : Promise.resolve(undefined)));
-      this.publications.clear(); this.source.stop(); this.source = undefined;
+      this.publications.clear(); this.source.stop(); this.processedSource?.stop(); this.audioContext?.close().catch(() => undefined); this.source = undefined; this.processedSource = undefined; this.audioContext = undefined; this.inputGain = undefined;
     }
     this.inputDeviceId = inputDeviceId;
     this.routes = new Map(routes.map((route) => [route.id, route]));
-    if (!this.source && routes.length) this.source = (await navigator.mediaDevices.getUserMedia({ audio: { deviceId: inputDeviceId === 'default' ? undefined : { exact: inputDeviceId } } })).getAudioTracks()[0];
+    if (!this.source && routes.length) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: inputDeviceId === 'default' ? undefined : { exact: inputDeviceId } } });
+      this.source = stream.getAudioTracks()[0];
+      this.audioContext = new AudioContext();
+      const sourceNode = this.audioContext.createMediaStreamSource(stream);
+      this.inputGain = this.audioContext.createGain();
+      const destination = this.audioContext.createMediaStreamDestination();
+      sourceNode.connect(this.inputGain).connect(destination);
+      this.processedSource = destination.stream.getAudioTracks()[0];
+    }
     for (const route of routes) {
       if (this.publications.has(route.id) || !this.source) continue;
-      const publication = await this.room.localParticipant.publishTrack(this.source.clone(), { name: `logicomms:${route.id}` });
+      const publication = await this.room.localParticipant.publishTrack((this.processedSource ?? this.source).clone(), { name: `logicomms:${route.id}` });
       await publication.mute();
       this.publications.set(route.id, publication);
     }
@@ -72,6 +87,15 @@ export class VoiceConnection {
   async setOutputDevice(deviceId: string) {
     this.outputDeviceId = deviceId;
     await Promise.all([...this.remoteTracks.values()].map((track) => track.setSinkId(deviceId).catch(() => undefined)));
+  }
+
+  setInputVolume(volume: number) {
+    if (this.inputGain) this.inputGain.gain.value = Math.max(0, Math.min(2, volume));
+  }
+
+  setOutputVolume(volume: number) {
+    this.outputVolume = Math.max(0, Math.min(1, volume));
+    this.remoteElements.forEach((element) => { element.volume = this.outputVolume; });
   }
 
   async setTransmitting(routeId: string, active: boolean, replyTarget?: string) {
@@ -107,5 +131,5 @@ export class VoiceConnection {
     for (const [sid, audio] of this.remoteTracks) if (this.routeByTrack.get(sid)?.sender === sender) audio.setMuted(sid !== selected);
   }
 
-  disconnect() { this.source?.stop(); this.room.disconnect(); }
+  disconnect() { this.source?.stop(); this.processedSource?.stop(); void this.audioContext?.close(); this.room.disconnect(); }
 }
