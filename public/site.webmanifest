@@ -1,0 +1,12 @@
+{
+  "name": "LogiComms",
+  "short_name": "LogiComms",
+  "description": "Push-to-talk voice for your groups.",
+  "display": "standalone",
+  "background_color": "#202124",
+  "theme_color": "#202124",
+  "icons": [
+    { "src": "/icons/ios/192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/512x512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
