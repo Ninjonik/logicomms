@@ -18,6 +18,7 @@ bun install --frozen-lockfile
 
 BUILD_NUMBER="$(git rev-list --count HEAD)"
 VERSION="0.1.${BUILD_NUMBER}"
+export VITE_APP_VERSION="$VERSION"
 trap 'git checkout -- package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json' EXIT
 node -e "const fs=require('fs');const p=require('./package.json');p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')"
 sed -i -E "s/^version = \"[^\"]+\"/version = \"$VERSION\"/" src-tauri/Cargo.toml

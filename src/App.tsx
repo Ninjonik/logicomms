@@ -72,7 +72,9 @@ export default function App() {
   const [incomingTalkers, setIncomingTalkers] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState('Preparing secure session…');
-  const [appVersion, setAppVersion] = useState('0.1.0');
+  // VITE_APP_VERSION is injected by the release builder, while getVersion()
+  // confirms the native package version at runtime in a Tauri window.
+  const [appVersion, setAppVersion] = useState(import.meta.env.VITE_APP_VERSION ?? '0.1.0');
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
