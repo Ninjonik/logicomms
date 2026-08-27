@@ -47,6 +47,17 @@ button {
   font-size: 10px;
   font-weight: 500;
 }
+.update-button {
+  border: 1px solid #4f8d63;
+  border-radius: 4px;
+  background: #203828;
+  color: #a7d6b0;
+  font-size: 10px;
+  padding: 3px 6px;
+}
+.update-button:hover {
+  background: #294a33;
+}
 .connection {
   margin-left: auto;
   font-size: 11px;

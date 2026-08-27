@@ -4,7 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { disable, enable } from '@tauri-apps/plugin-autostart';
-import { check } from '@tauri-apps/plugin-updater';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { callLobbyApi, ensureAnonymousSession, getCurrentUser } from './lib/appwrite';
 import { VoiceConnection } from './lib/voice';
 import type { VoiceRoute } from './lib/voice';
@@ -72,6 +72,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState('Preparing secure session…');
   const [appVersion, setAppVersion] = useState('0.1.0');
+  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
   const [voice, setVoice] = useState<VoiceConnection | null>(null);
@@ -91,15 +92,23 @@ export default function App() {
     if (isTauri()) void getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
 
-  // Release builds check the signed Tauri update manifest on startup. On
-  // Windows, installing an update closes the app and the NSIS installer
-  // finishes the update using its passive progress UI.
+  // Check on launch, but let the user explicitly start installation. Starting
+  // NSIS while the app is still initializing can otherwise relaunch the app
+  // before the replacement has completed.
   useEffect(() => {
     if (!isTauri()) return;
-    void check()
-      .then((available) => available?.downloadAndInstall())
-      .catch(() => undefined);
+    void check().then(setAvailableUpdate).catch(() => undefined);
   }, []);
+
+  const installUpdate = async () => {
+    if (!availableUpdate) return;
+    setStatus(`Installing v${availableUpdate.version}…`);
+    try {
+      await availableUpdate.downloadAndInstall();
+    } catch {
+      setStatus('Update installation failed');
+    }
+  };
 
   const refreshDevices = () =>
       void navigator.mediaDevices
@@ -371,6 +380,11 @@ export default function App() {
             logicomms
             <span className="app-version">v{appVersion}</span>
           </div>
+          {availableUpdate && (
+              <button className="update-button" onClick={() => void installUpdate()}>
+                Update v{availableUpdate.version}
+              </button>
+          )}
           <div className={joined ? 'connection connected' : 'connection'}>
             <i />
             {joined ? 'Connected' : status}
