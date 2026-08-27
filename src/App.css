@@ -42,6 +42,11 @@ button {
   display: grid;
   place-items: center;
 }
+.app-version {
+  color: #777a80;
+  font-size: 10px;
+  font-weight: 500;
+}
 .connection {
   margin-left: auto;
   font-size: 11px;

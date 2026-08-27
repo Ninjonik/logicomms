@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { disable, enable } from '@tauri-apps/plugin-autostart';
 import { check } from '@tauri-apps/plugin-updater';
@@ -70,6 +71,7 @@ export default function App() {
   const [incomingTalkers, setIncomingTalkers] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState('Preparing secure session…');
+  const [appVersion, setAppVersion] = useState('0.1.0');
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
   const [voice, setVoice] = useState<VoiceConnection | null>(null);
@@ -84,6 +86,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('logicomms:preferences', JSON.stringify(prefs));
   }, [prefs]);
+
+  useEffect(() => {
+    if (isTauri()) void getVersion().then(setAppVersion).catch(() => undefined);
+  }, []);
 
   // Release builds check the signed Tauri update manifest on startup. On
   // Windows, installing an update closes the app and the NSIS installer
@@ -363,6 +369,7 @@ export default function App() {
             <Radio size={15} />
           </span>
             logicomms
+            <span className="app-version">v{appVersion}</span>
           </div>
           <div className={joined ? 'connection connected' : 'connection'}>
             <i />
