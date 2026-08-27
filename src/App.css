@@ -148,6 +148,20 @@ button {
   border: 1px solid #56585c;
   border-radius: 2px;
 }
+.main-nickname {
+  display: block;
+  margin-bottom: 8px;
+  color: #b9bbc0;
+  font-size: 11px;
+}
+.main-nickname input {
+  margin-bottom: 0;
+}
+.permission-note {
+  margin: 7px 0 0;
+  color: #dfaa77;
+  font-size: 11px;
+}
 .create-lobby-code {
   display: block;
   margin-top: 14px;

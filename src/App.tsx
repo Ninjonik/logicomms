@@ -75,6 +75,7 @@ export default function App() {
   const [incomingTalkers, setIncomingTalkers] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState('Preparing secure session…');
+  const [microphoneMessage, setMicrophoneMessage] = useState<string | null>(null);
   // VITE_APP_VERSION is injected by the release builder, while getVersion()
   // confirms the native package version at runtime in a Tauri window.
   const [appVersion, setAppVersion] = useState(import.meta.env.VITE_APP_VERSION ?? '0.1.0');
@@ -146,6 +147,28 @@ export default function App() {
     refreshDevices();
     navigator.mediaDevices?.addEventListener('devicechange', refreshDevices);
     return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshDevices);
+  }, []);
+
+  // Windows/WebView permissions are granted per application, not by NSIS
+  // during installation. Request the microphone on first app launch and
+  // immediately release it, so talking later never causes a surprise prompt.
+  useEffect(() => {
+    let cancelled = false;
+    void navigator.mediaDevices
+        ?.getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach((track) => track.stop());
+          if (!cancelled) {
+            setMicrophoneMessage(null);
+            refreshDevices();
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setMicrophoneMessage('Microphone access was not granted. You can enable it in Windows Settings.');
+        });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -437,7 +460,17 @@ export default function App() {
             <section className="welcome">
               <h1>Lobby</h1>
               <p>Join a lobby by its single-word name, or create one.</p>
+              <label className="main-nickname">
+                Your nickname
+                <input
+                    value={prefs.nickname}
+                    maxLength={32}
+                    onChange={(event) => update({ nickname: event.target.value })}
+                    placeholder="Your name"
+                />
+              </label>
               <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="swiftfalcon" />
+              {microphoneMessage && <p className="permission-note">{microphoneMessage}</p>}
               <button className="primary" disabled={busy} onClick={() => void join()}>
                 Join lobby
               </button>
