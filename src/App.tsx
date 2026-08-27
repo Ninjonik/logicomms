@@ -38,6 +38,7 @@ type Preferences = {
   overlayPosition: OverlayPosition;
   overlayScale: number;
   language?: Language;
+  lastLobbyCode?: string;
 };
 type Device = { deviceId: string; label: string };
 
@@ -115,6 +116,7 @@ export default function App() {
   const [appVersion, setAppVersion] = useState(import.meta.env.VITE_APP_VERSION ?? '0.1.0');
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+  const [rejoinPrompt, setRejoinPrompt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
   const [voice, setVoice] = useState<VoiceConnection | null>(null);
@@ -126,6 +128,7 @@ export default function App() {
   const voiceRef = useRef<VoiceConnection | null>(null);
   const pressedKeysRef = useRef(new Set<string>());
   const microphoneTestRef = useRef<{ stream: MediaStream; context: AudioContext; frame: number } | null>(null);
+  const hasShownRejoinPrompt = useRef(false);
   const joined = lobby !== null;
   const update = (patch: Partial<Preferences>) => setPrefs((value) => ({ ...value, ...patch }));
   const t = translations[prefs.language ?? 'en'];
@@ -291,6 +294,12 @@ export default function App() {
         })
         .catch((caught) => setStatus(caught.message));
   }, []);
+
+  useEffect(() => {
+    if (!userId || !prefs.lastLobbyCode || hasShownRejoinPrompt.current) return;
+    hasShownRejoinPrompt.current = true;
+    setRejoinPrompt(prefs.lastLobbyCode);
+  }, [prefs.lastLobbyCode, userId]);
 
   useEffect(() => {
     if (!lobby) return;
@@ -464,7 +473,9 @@ export default function App() {
     if (!prefs.nickname.trim()) return setStatus('Choose a nickname first.');
     setBusy(true);
     try {
-      setLobby(await callLobbyApi<Lobby>({ action: 'createLobby', nickname: prefs.nickname, code: newLobbyCode }));
+      const nextLobby = await callLobbyApi<Lobby>({ action: 'createLobby', nickname: prefs.nickname, code: newLobbyCode });
+      setLobby(nextLobby);
+      update({ lastLobbyCode: nextLobby.code });
       setStatus('Connected');
     } catch (caught) {
       setStatus((caught as Error).message);
@@ -477,7 +488,9 @@ export default function App() {
     if (!prefs.nickname.trim()) return setStatus('Choose a nickname first.');
     setBusy(true);
     try {
-      setLobby(await callLobbyApi<Lobby>({ action: 'joinLobby', code, nickname: prefs.nickname }));
+      const nextLobby = await callLobbyApi<Lobby>({ action: 'joinLobby', code, nickname: prefs.nickname });
+      setLobby(nextLobby);
+      update({ lastLobbyCode: nextLobby.code });
       setStatus('Connected');
     } catch (caught) {
       setStatus((caught as Error).message);
@@ -494,7 +507,29 @@ export default function App() {
       setLobby(null);
       setTransmitting([]);
       setIncomingTalkers([]);
+      update({ lastLobbyCode: undefined });
       setStatus('Ready');
+    } catch (caught) {
+      setStatus((caught as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rejoinLastLobby = async () => {
+    if (!rejoinPrompt || !prefs.nickname.trim()) return setStatus('Choose a nickname first.');
+    const lastCode = rejoinPrompt;
+    setRejoinPrompt(null);
+    setBusy(true);
+    try {
+      try {
+        setLobby(await callLobbyApi<Lobby>({ action: 'joinLobby', code: lastCode, nickname: prefs.nickname }));
+      } catch (caught) {
+        if (!(caught as Error).message.includes('no longer exists')) throw caught;
+        setLobby(await callLobbyApi<Lobby>({ action: 'createLobby', code: lastCode, nickname: prefs.nickname }));
+      }
+      update({ lastLobbyCode: lastCode });
+      setStatus('Connected');
     } catch (caught) {
       setStatus((caught as Error).message);
     } finally {
@@ -642,6 +677,19 @@ export default function App() {
                 <div className="update-prompt-actions">
                   <button className="quiet" onClick={() => setShowUpdatePrompt(false)}>Later</button>
                   <button className="primary" onClick={() => void installUpdate()}>Update now</button>
+                </div>
+              </section>
+            </div>
+        )}
+
+        {rejoinPrompt && !joined && (
+            <div className="update-prompt-backdrop" role="presentation">
+              <section className="update-prompt" role="dialog" aria-modal="true" aria-labelledby="rejoin-title">
+                <h2 id="rejoin-title">Rejoin your last lobby?</h2>
+                <p>Would you like to rejoin <b>{rejoinPrompt}</b>? If it has expired, a lobby with the same code will be created.</p>
+                <div className="update-prompt-actions">
+                  <button className="quiet" onClick={() => { update({ lastLobbyCode: undefined }); setRejoinPrompt(null); }}>No thanks</button>
+                  <button className="primary" disabled={busy} onClick={() => void rejoinLastLobby()}>Rejoin</button>
                 </div>
               </section>
             </div>
