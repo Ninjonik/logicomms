@@ -5,7 +5,11 @@ APP_DIR="${APP_DIR:-/home/services/logicomms}"
 BRANCH="${BRANCH:-main}"
 RELEASE_DIR="${RELEASE_DIR:-/var/www/logicomms-releases}"
 export PATH="/root/.cargo/bin:/root/.bun/bin:$PATH"
-export TAURI_SIGNING_PRIVATE_KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY_PATH:-/root/.tauri/logicomms-updater.key}"
+SIGNING_KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY_PATH:-/root/.tauri/logicomms-updater.key}"
+test -r "$SIGNING_KEY_PATH"
+# Tauri's bundler reads the key *content* from this variable on Linux.
+export TAURI_SIGNING_PRIVATE_KEY="$(<"$SIGNING_KEY_PATH")"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 
 cd "$APP_DIR"
 git fetch origin "$BRANCH"
