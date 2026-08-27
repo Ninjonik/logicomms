@@ -21,6 +21,7 @@ export class VoiceConnection {
   constructor(
     onState: (state: string) => void,
     private readonly onIncomingActivity: (identity: string, active: boolean) => void = () => undefined,
+    private readonly onReplyTarget: (identity?: string) => void = () => undefined,
   ) {
     this.room.on(RoomEvent.ConnectionStateChanged, (state) => onState(`Voice: ${state}`));
     this.room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
@@ -88,7 +89,11 @@ export class VoiceConnection {
     const targeted = signal.targets.includes(this.room.localParticipant.identity);
     this.routeByTrack.set(signal.trackSid, { sender: participant.identity, targeted });
     const active = this.activeBySender.get(participant.identity) ?? new Set<string>();
-    if (signal.type === 'start' && targeted) { active.add(signal.trackSid); this.lastCaller = participant.identity; }
+    if (signal.type === 'start' && targeted) {
+      active.add(signal.trackSid);
+      this.lastCaller = participant.identity;
+      this.onReplyTarget(participant.identity);
+    }
     else active.delete(signal.trackSid);
     this.activeBySender.set(participant.identity, active); this.refreshSender(participant.identity);
     this.onIncomingActivity(participant.identity, active.size > 0);

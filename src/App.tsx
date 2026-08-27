@@ -21,6 +21,7 @@ type Group = { id: string; name: string; key: string; members: string[] };
 // Groups are deliberately local preferences.  Keep a tiny address book beside
 // them so a member can still be edited after they have left the lobby.
 type KnownPerson = { userId: string; nickname: string };
+type Language = 'en' | 'cs';
 type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type Preferences = {
   nickname: string;
@@ -34,6 +35,7 @@ type Preferences = {
   autoUpdate: boolean;
   overlayPosition: OverlayPosition;
   overlayScale: number;
+  language?: Language;
 };
 type Device = { deviceId: string; label: string };
 
@@ -51,6 +53,11 @@ const initial: Preferences = {
   people: [],
 };
 
+const translations = {
+  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
+  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
+} as const;
+
 const loadPreferences = (): Preferences => {
   try {
     const saved = { ...initial, ...JSON.parse(localStorage.getItem('logicomms:preferences') ?? '{}') };
@@ -65,8 +72,15 @@ const loadPreferences = (): Preferences => {
   }
 };
 
+const displayKey = (value: string) => value
+    .replace(/\u00e2\u20ac\u00a6/g, '...')
+    .replace(/\u00e2\u20ac\u201d/g, '-')
+    .replace(/\u00e2\u20ac\u201c/g, '-')
+    .replace(/\u00c3\u00a2\u00e2\u201a\u00ac\u00c2\u00a6/g, '...')
+    .replace(/\u00c3\u00a2\u00e2\u201a\u00ac\u00c2\u201d/g, '-');
+
 function Key({ children, active = false }: { children: string; active?: boolean }) {
-  return <kbd className={active ? 'key active' : 'key'}>{children}</kbd>;
+  return <kbd className={active ? 'key active' : 'key'}>{displayKey(children)}</kbd>;
 }
 
 // The passive Windows hook reports `T`; browsers can report `t` or `KeyT`.
@@ -86,6 +100,7 @@ export default function App() {
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [transmitting, setTransmitting] = useState<string[]>([]);
   const [incomingTalkers, setIncomingTalkers] = useState<string[]>([]);
+  const [replyTarget, setReplyTarget] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState('Preparing secure session…');
   const [microphoneMessage, setMicrophoneMessage] = useState<string | null>(null);
@@ -97,13 +112,14 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
   const [voice, setVoice] = useState<VoiceConnection | null>(null);
-  const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const [assigningGroup, setAssigningGroup] = useState<string | null>(null);
   const [devices, setDevices] = useState<{ inputs: Device[]; outputs: Device[] }>({ inputs: [], outputs: [] });
   const [capturing, setCapturing] = useState<string | null>(null);
   const voiceRef = useRef<VoiceConnection | null>(null);
   const pressedKeysRef = useRef(new Set<string>());
   const joined = lobby !== null;
   const update = (patch: Partial<Preferences>) => setPrefs((value) => ({ ...value, ...patch }));
+  const t = translations[prefs.language ?? 'en'];
 
   useEffect(() => {
     localStorage.setItem('logicomms:preferences', JSON.stringify(prefs));
@@ -221,7 +237,7 @@ export default function App() {
     const connection = new VoiceConnection(setStatus, (identity, active) => {
       const memberId = identity.replace(/^u_/, '');
       setIncomingTalkers((current) => active ? [...new Set([...current, memberId])] : current.filter((id) => id !== memberId));
-    });
+    }, (identity) => setReplyTarget(identity ? identity.replace(/^u_/, '') : null));
     void callLobbyApi<VoiceCredentials>({ action: 'livekitToken', code: lobby.code })
         .then(async (credentials) => {
           await connection.connect(credentials);
@@ -231,6 +247,7 @@ export default function App() {
     return () => {
       setVoice(null);
       setIncomingTalkers([]);
+      setReplyTarget(null);
       connection.disconnect();
     };
   }, [lobby?.code]);
@@ -430,10 +447,11 @@ export default function App() {
     if (!lobby) return selected;
     for (const routeId of transmitting) {
       if (routeId === 'all') lobby.members.filter((member) => member.userId !== userId).forEach((member) => selected.add(member.userId));
-      else if (routeId !== 'reply') prefs.groups.find((group) => group.id === routeId)?.members.forEach((memberId) => selected.add(memberId));
+      else if (routeId === 'reply') { if (replyTarget) selected.add(replyTarget); }
+      else prefs.groups.find((group) => group.id === routeId)?.members.forEach((memberId) => selected.add(memberId));
     }
     return selected;
-  }, [lobby, prefs.groups, transmitting, userId]);
+  }, [lobby, prefs.groups, replyTarget, transmitting, userId]);
 
   const outgoingNames = useMemo(
       () => lobby?.members.filter((member) => outgoingTargets.has(member.userId)).map((member) => member.nickname) ?? [],
@@ -456,6 +474,7 @@ export default function App() {
       return connectionOrder || a.nickname.localeCompare(b.nickname);
     });
   }, [lobby?.members, prefs.groups, prefs.people, userId]);
+  const assignedGroup = prefs.groups.find((group) => group.id === assigningGroup);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -478,11 +497,10 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [incomingTalkers, lobby, outgoingTargets, prefs.groups, transmitting, userId]);
 
-  const addGroup = (openEditor = false) => {
+  const addGroup = () => {
     const id = crypto.randomUUID();
     update({ groups: [...prefs.groups, { id, name: 'New group', key: '', members: [] }] });
     setCapturing(id);
-    if (openEditor) setEditingGroup(id);
   };
 
   useEffect(() => {
@@ -501,13 +519,28 @@ export default function App() {
   const captureKey = (id: string, event: React.KeyboardEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (!capturing) return;
-    const key = event.key.length === 1 ? event.key.toUpperCase() : event.code.replace('Key', '').replace('Digit', '');
+    const key = event.key === ' ' ? 'SPACE' : event.key.length === 1 ? event.key.toUpperCase() : event.code.replace('Key', '').replace('Digit', '');
     if (!key || ['Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(event.key)) return;
     if (id === 'all') update({ allKey: key });
     else if (id === 'reply') update({ replyKey: key });
     else update({ groups: prefs.groups.map((group) => (group.id === id ? { ...group, key } : group)) });
     setCapturing(null);
   };
+
+  useEffect(() => {
+    if (!capturing) return;
+    const assign = (event: KeyboardEvent) => {
+      event.preventDefault();
+      const key = event.key === ' ' ? 'SPACE' : event.key.length === 1 ? event.key.toUpperCase() : event.code.replace('Key', '').replace('Digit', '');
+      if (!key || ['Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(event.key)) return;
+      if (capturing === 'all') update({ allKey: key });
+      else if (capturing === 'reply') update({ replyKey: key });
+      else update({ groups: prefs.groups.map((group) => group.id === capturing ? { ...group, key } : group) });
+      setCapturing(null);
+    };
+    window.addEventListener('keydown', assign, true);
+    return () => window.removeEventListener('keydown', assign, true);
+  }, [capturing, prefs.groups]);
 
   return (
       <main className="app-shell">
@@ -526,7 +559,7 @@ export default function App() {
           )}
           <div className={joined ? 'connection connected' : 'connection'}>
             <i />
-            {joined ? 'Connected' : status}
+            {joined ? t.connected : status}
           </div>
           <button className="icon-button" aria-label="Settings" onClick={() => setShowSettings((value) => !value)}>
             <Settings2 size={17} />
@@ -548,10 +581,10 @@ export default function App() {
 
         {!joined ? (
             <section className="welcome">
-              <h1>Lobby</h1>
+              <h1>{t.lobby}</h1>
               <p>Join a lobby by its single-word name, or create one.</p>
               <label className="main-nickname">
-                Your nickname
+                {t.yourNickname}
                 <input
                     value={prefs.nickname}
                     maxLength={32}
@@ -562,10 +595,10 @@ export default function App() {
               <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="swiftfalcon" />
               {microphoneMessage && <p className="permission-note">{microphoneMessage}</p>}
               <button className="primary" disabled={busy} onClick={() => void join()}>
-                Join lobby
+                {t.joinLobby}
               </button>
               <label className="create-lobby-code">
-                Custom lobby name <small>optional</small>
+                {t.customLobby} <small>{t.optional}</small>
                 <input
                     value={newLobbyCode}
                     maxLength={32}
@@ -574,7 +607,7 @@ export default function App() {
                 />
               </label>
               <button className="quiet" disabled={busy} onClick={() => void create()}>
-                Create lobby
+                {t.createLobby}
               </button>
             </section>
         ) : (
@@ -585,7 +618,7 @@ export default function App() {
                   <strong>{lobby.code}</strong>
                 </div>
                 <button className="leave" disabled={busy} onClick={() => void leave()}>
-                  <LogOut size={14} /> Leave
+                  <LogOut size={14} /> {t.leave}
                 </button>
               </section>
 
@@ -607,15 +640,17 @@ export default function App() {
               <section className="section">
                 <div className="section-title">
               <span>
-                <Users size={15} /> People <em>{lobby.members.length}</em>
+                <Users size={15} /> {t.people} <em>{lobby.members.length}</em>
               </span>
-                  <span className="muted">in this lobby</span>
+                  <span className="muted">{t.inLobby}</span>
                 </div>
                 <div className="member-list">
                   {lobby.members.map((member) => (
                       <div
                         className={`member${outgoingTargets.has(member.userId) ? ' outgoing' : ''}${incomingTalkers.includes(member.userId) ? ' incoming' : ''}`}
                         key={member.userId}
+                        draggable={member.userId !== userId}
+                        onDragStart={(event) => event.dataTransfer.setData('application/x-logicomms-person', member.userId)}
                       >
                         <span className="avatar">{member.nickname.slice(0, 1)}</span>
                         <span>{member.nickname}</span>
@@ -629,28 +664,35 @@ export default function App() {
               <section className="section">
                 <div className="section-title">
               <span>
-                <KeyRound size={15} /> Your groups
+                <KeyRound size={15} /> {t.yourGroups}
               </span>
-                  <button className="text-button" onClick={() => addGroup(true)}>
-                    <Plus size={14} /> Group
+                  <button className="text-button" onClick={() => addGroup()}>
+                    <Plus size={14} /> {t.group}
                   </button>
                 </div>
                 <div className="group-list">
                   {prefs.groups.map((group) => (
                       <div className="group-wrap" key={group.id}>
-                        <div className="group">
-                          <button className="group-main" onClick={() => toggle(group.id)}>
-                      <span className="group-name">
+                        <div className="group" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+                          const memberId = event.dataTransfer.getData('application/x-logicomms-person');
+                          if (memberId && !group.members.includes(memberId)) update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, members: [...entry.members, memberId] } : entry) });
+                        }}>
+                          <button className="group-main" onClick={() => setCapturing(group.id)}>
+                      <span className="group-name" onDoubleClick={(event) => {
+                        event.preventDefault(); event.stopPropagation();
+                        const name = window.prompt(t.groupName, group.name)?.trim();
+                        if (name) update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, name } : entry) });
+                      }}>
                         {group.name}
                         <small>{group.members.length} people</small>
                       </span>
                             <Key active={transmitting.includes(group.id)}>{group.key || '—'}</Key>
                           </button>
-                          <button className="edit" onClick={() => setEditingGroup(editingGroup === group.id ? null : group.id)}>
+                          <button className="edit" onClick={() => setAssigningGroup(group.id)}>
                             •••
                           </button>
                         </div>
-                        {editingGroup === group.id && (
+                        {false && (
                             <div className="group-members">
                               <div className="group-details">
                                 <label>
@@ -729,20 +771,65 @@ export default function App() {
             </>
         )}
 
+        {assignedGroup && (
+            <div className="assignment-backdrop" role="presentation" onMouseDown={() => setAssigningGroup(null)}>
+              <section className="assignment-modal" role="dialog" aria-modal="true" aria-label={t.assignPeople} onMouseDown={(event) => event.stopPropagation()}>
+                <div className="section-title"><span>{t.assignPeople}: {assignedGroup.name}</span><button className="text-button" onClick={() => setAssigningGroup(null)}>{t.done}</button></div>
+                <p className="assignment-help">{t.savedLocally}</p>
+                <div className="group-person-list">
+                  {knownPeople.length === 0 ? <p className="empty-group">{t.noPeople}</p> : knownPeople.map((person) => {
+                    const selected = assignedGroup.members.includes(person.userId);
+                    const connected = lobby?.members.some((member) => member.userId === person.userId);
+                    return <button type="button" className={`group-person${selected ? ' selected' : ''}`} aria-pressed={selected} key={person.userId} onClick={() => update({
+                      groups: prefs.groups.map((group) => group.id !== assignedGroup.id ? group : { ...group, members: selected ? group.members.filter((id) => id !== person.userId) : [...group.members, person.userId] }),
+                    })}>
+                      <span className="avatar">{person.nickname.slice(0, 1)}</span><span className="group-person-copy"><strong>{person.nickname}</strong><small className={connected ? 'online' : ''}>{connected ? t.inThisLobby : t.savedPerson}</small></span><span className="assignment-state">{selected ? <><Check size={14} /> {t.added}</> : t.add}</span>
+                    </button>;
+                  })}
+                </div>
+              </section>
+            </div>
+        )}
+
+        {capturing && (
+            <div className="assignment-backdrop" role="presentation">
+              <section className="capture-modal" role="dialog" aria-modal="true" aria-label={t.hotkey}>
+                <KeyRound size={22} /><h2>{t.hotkey}</h2><p>{t.waiting}</p>
+                <button className="quiet" onClick={() => setCapturing(null)}>{t.cancel}</button>
+              </section>
+            </div>
+        )}
+
+        {!prefs.language && (
+            <div className="assignment-backdrop" role="presentation">
+              <section className="capture-modal language-modal" role="dialog" aria-modal="true" aria-label={t.chooseLanguage}>
+                <h2>{t.chooseLanguage}</h2><p>{t.languageHint}</p>
+                <div className="language-options"><button onClick={() => update({ language: 'en' })}>🇬🇧 {t.english}</button><button onClick={() => update({ language: 'cs' })}>🇨🇿 {t.czech}</button></div>
+              </section>
+            </div>
+        )}
+
         {showSettings && (
             <aside className="settings-panel">
               <div className="section-title">
-                <span>Settings</span>
+                <span>{t.settings}</span>
                 <button className="text-button" onClick={() => setShowSettings(false)}>
-                  Done
+                  {t.done}
                 </button>
               </div>
               <label>
-                Nickname
+                {t.languageSetting}
+                <select value={prefs.language ?? 'en'} onChange={(event) => update({ language: event.target.value as Language })}>
+                  <option value="en">🇬🇧 English</option>
+                  <option value="cs">🇨🇿 Čeština</option>
+                </select>
+              </label>
+              <label>
+                {t.nickname}
                 <input value={prefs.nickname} maxLength={32} onChange={(event) => update({ nickname: event.target.value })} />
               </label>
               <label>
-                Input device
+                {t.inputDevice}
                 <select value={prefs.input} onChange={(event) => update({ input: event.target.value })}>
                   <option value="default">System default</option>
                   {devices.inputs.map((device) => (
@@ -753,7 +840,7 @@ export default function App() {
                 </select>
               </label>
               <label>
-                Output device
+                {t.outputDevice}
                 <select value={prefs.output} onChange={(event) => update({ output: event.target.value })}>
                   <option value="default">System default</option>
                   {devices.outputs.map((device) => (
