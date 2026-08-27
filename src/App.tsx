@@ -24,6 +24,7 @@ type Preferences = {
   allKey: string;
   replyKey: string;
   launchAtLogin: boolean;
+  autoUpdate: boolean;
 };
 type Device = { deviceId: string; label: string };
 
@@ -34,6 +35,7 @@ const initial: Preferences = {
   allKey: 'Y',
   replyKey: 'R',
   launchAtLogin: false,
+  autoUpdate: true,
   groups: [],
 };
 
@@ -76,6 +78,7 @@ export default function App() {
   // confirms the native package version at runtime in a Tauri window.
   const [appVersion, setAppVersion] = useState(import.meta.env.VITE_APP_VERSION ?? '0.1.0');
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState('');
   const [voice, setVoice] = useState<VoiceConnection | null>(null);
@@ -95,16 +98,25 @@ export default function App() {
     if (isTauri()) void getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
 
-  // Check on launch, but let the user explicitly start installation. Starting
-  // NSIS while the app is still initializing can otherwise relaunch the app
-  // before the replacement has completed.
+  // An enabled automatic-update preference means "check and ask". The user
+  // still explicitly starts NSIS, avoiding a replacement while the app is
+  // launching.
   useEffect(() => {
     if (!isTauri()) return;
-    void check().then(setAvailableUpdate).catch(() => undefined);
+    void check()
+        .then((update) => {
+          setAvailableUpdate(update);
+          if (update && prefs.autoUpdate) setShowUpdatePrompt(true);
+        })
+        .catch(() => undefined);
+    // Preferences are loaded synchronously, so this is intentionally a
+    // launch-only check rather than a new check after every settings change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const installUpdate = async () => {
     if (!availableUpdate) return;
+    setShowUpdatePrompt(false);
     setStatus(`Installing v${availableUpdate.version}…`);
     try {
       await invoke('allow_update_exit');
@@ -398,6 +410,19 @@ export default function App() {
           </button>
         </header>
 
+        {showUpdatePrompt && availableUpdate && (
+            <div className="update-prompt-backdrop" role="presentation">
+              <section className="update-prompt" role="dialog" aria-modal="true" aria-labelledby="update-title">
+                <h2 id="update-title">Update available</h2>
+                <p>LogiComms v{availableUpdate.version} is ready to install.</p>
+                <div className="update-prompt-actions">
+                  <button className="quiet" onClick={() => setShowUpdatePrompt(false)}>Later</button>
+                  <button className="primary" onClick={() => void installUpdate()}>Update now</button>
+                </div>
+              </section>
+            </div>
+        )}
+
         {!joined ? (
             <section className="welcome">
               <h1>Lobby</h1>
@@ -613,6 +638,14 @@ export default function App() {
                     onChange={(event) => update({ launchAtLogin: event.target.checked })}
                 />{' '}
                 Start with Windows
+              </label>
+              <label className="toggle">
+                <input
+                    type="checkbox"
+                    checked={prefs.autoUpdate}
+                    onChange={(event) => update({ autoUpdate: event.target.checked })}
+                />{' '}
+                Automatically check for updates on launch
               </label>
             </aside>
         )}
