@@ -237,6 +237,21 @@ button {
     background 0.12s,
     border-color 0.12s;
 }
+.member-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.member-volume {
+  display: flex;
+  min-width: 88px;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.member-volume input { width: 58px; accent-color: #85b875; }
+.member-volume small { width: 29px; color: #aeb1b5; font-size: 9px; font-variant-numeric: tabular-nums; }
+.member .talk-state { margin-left: 0; }
 .member.outgoing {
   background: #1f3b29;
   border-left: 3px solid #69bd7b;

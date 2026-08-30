@@ -29,6 +29,7 @@ type Preferences = {
   output: string;
   inputVolume: number;
   outputVolume: number;
+  playerVolumes: Record<string, number>;
   groups: Group[];
   people: KnownPerson[];
   allKey: string;
@@ -48,6 +49,7 @@ const initial: Preferences = {
   output: 'Default — Headphones',
   inputVolume: 100,
   outputVolume: 100,
+  playerVolumes: {},
   allKey: 'Y',
   replyKey: 'R',
   launchAtLogin: false,
@@ -71,6 +73,7 @@ const loadPreferences = (): Preferences => {
       people: Array.isArray(saved.people) ? saved.people : [],
       inputVolume: typeof saved.inputVolume === 'number' ? saved.inputVolume : 100,
       outputVolume: typeof saved.outputVolume === 'number' ? saved.outputVolume : 100,
+      playerVolumes: saved.playerVolumes && typeof saved.playerVolumes === 'object' ? saved.playerVolumes : {},
       input: saved.input.startsWith('Default') ? 'default' : saved.input,
       output: saved.output.startsWith('Default') ? 'default' : saved.output,
     };
@@ -345,6 +348,10 @@ export default function App() {
   useEffect(() => {
     voice?.setOutputVolume(prefs.outputVolume / 100);
   }, [voice, prefs.outputVolume]);
+
+  useEffect(() => {
+    Object.entries(prefs.playerVolumes).forEach(([memberId, volume]) => voice?.setParticipantVolume(`u_${memberId}`, Number(volume) / 100));
+  }, [voice, prefs.playerVolumes]);
 
   useEffect(() => {
     voiceRef.current = voice;
@@ -787,7 +794,21 @@ export default function App() {
                         onDragStart={(event) => event.dataTransfer.setData('application/x-logicomms-person', member.userId)}
                       >
                         <span className="avatar">{member.nickname.slice(0, 1)}</span>
-                        <span>{member.nickname}</span>
+                        <span className="member-name">{member.nickname}</span>
+                        {member.userId !== userId && (
+                          <label className="member-volume" title={`Volume for ${member.nickname}`}>
+                            <input
+                              type="range"
+                              min="0"
+                              max="200"
+                              step="5"
+                              value={prefs.playerVolumes[member.userId] ?? 100}
+                              aria-label={`Volume for ${member.nickname}`}
+                              onChange={(event) => update({ playerVolumes: { ...prefs.playerVolumes, [member.userId]: Number(event.target.value) } })}
+                            />
+                            <small>{prefs.playerVolumes[member.userId] ?? 100}%</small>
+                          </label>
+                        )}
                         {outgoingTargets.has(member.userId) && <small className="talk-state outgoing-state">You → them</small>}
                         {incomingTalkers.includes(member.userId) && <small className="talk-state incoming-state">Talking to you</small>}
                       </div>

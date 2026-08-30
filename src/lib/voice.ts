@@ -15,6 +15,9 @@ export class VoiceConnection {
   private inputGain?: GainNode;
   private remoteTracks = new Map<string, RemoteAudioTrack>();
   private remoteElements = new Map<string, HTMLAudioElement>();
+  private remoteTrackOwners = new Map<string, string>();
+  private remoteAudioContext?: AudioContext;
+  private participantVolumes = new Map<string, number>();
   private activeBySender = new Map<string, Set<string>>();
   private selectedBySender = new Map<string, string>();
   private routeByTrack = new Map<string, { sender: string; targeted: boolean }>();
@@ -38,15 +41,19 @@ export class VoiceConnection {
       const audio = track as RemoteAudioTrack;
       audio.setMuted(true);
       void audio.setSinkId(this.outputDeviceId).catch(() => undefined);
-      const element = audio.attach(); element.autoplay = true; element.volume = this.outputVolume; element.style.display = 'none'; document.body.append(element);
+      this.remoteAudioContext ??= new AudioContext();
+      audio.setAudioContext(this.remoteAudioContext);
+      const element = audio.attach(); element.autoplay = true; element.style.display = 'none'; document.body.append(element);
       this.remoteElements.set(publication.trackSid, element);
       this.remoteTracks.set(publication.trackSid, audio);
+      this.remoteTrackOwners.set(publication.trackSid, participant.identity);
+      this.applyTrackVolume(publication.trackSid);
       this.refreshSender(participant.identity);
     });
     this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
       if (track.kind !== Track.Kind.Audio) return;
       (track as RemoteAudioTrack).detach().forEach((element) => element.remove());
-      this.remoteTracks.delete(publication.trackSid); this.remoteElements.delete(publication.trackSid); this.routeByTrack.delete(publication.trackSid); this.refreshSender(participant.identity);
+      this.remoteTracks.delete(publication.trackSid); this.remoteElements.delete(publication.trackSid); this.remoteTrackOwners.delete(publication.trackSid); this.routeByTrack.delete(publication.trackSid); this.refreshSender(participant.identity);
     });
     this.room.on(RoomEvent.Disconnected, () => onState('Voice disconnected'));
   }
@@ -86,6 +93,8 @@ export class VoiceConnection {
 
   async setOutputDevice(deviceId: string) {
     this.outputDeviceId = deviceId;
+    const context = this.remoteAudioContext as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> } | undefined;
+    await context?.setSinkId?.(deviceId).catch(() => undefined);
     await Promise.all([...this.remoteTracks.values()].map((track) => track.setSinkId(deviceId).catch(() => undefined)));
   }
 
@@ -95,7 +104,21 @@ export class VoiceConnection {
 
   setOutputVolume(volume: number) {
     this.outputVolume = Math.max(0, Math.min(1, volume));
-    this.remoteElements.forEach((element) => { element.volume = this.outputVolume; });
+    this.remoteTracks.forEach((_track, sid) => this.applyTrackVolume(sid));
+  }
+
+  setParticipantVolume(identity: string, volume: number) {
+    this.participantVolumes.set(identity, Math.max(0, Math.min(2, volume)));
+    this.remoteTrackOwners.forEach((owner, sid) => {
+      if (owner === identity) this.applyTrackVolume(sid);
+    });
+  }
+
+  private applyTrackVolume(sid: string) {
+    const track = this.remoteTracks.get(sid);
+    if (!track) return;
+    const owner = this.remoteTrackOwners.get(sid);
+    track.setVolume(this.outputVolume * (owner ? this.participantVolumes.get(owner) ?? 1 : 1));
   }
 
   async setTransmitting(routeId: string, active: boolean, replyTarget?: string) {
@@ -131,5 +154,5 @@ export class VoiceConnection {
     for (const [sid, audio] of this.remoteTracks) if (this.routeByTrack.get(sid)?.sender === sender) audio.setMuted(sid !== selected);
   }
 
-  disconnect() { this.source?.stop(); this.processedSource?.stop(); void this.audioContext?.close(); this.room.disconnect(); }
+  disconnect() { this.source?.stop(); this.processedSource?.stop(); void this.audioContext?.close(); void this.remoteAudioContext?.close(); this.room.disconnect(); }
 }
