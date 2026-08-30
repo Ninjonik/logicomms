@@ -25,10 +25,11 @@ export function Overlay() {
       {state.people.map((person) => {
         const outgoing = state.outgoing.includes(person.id);
         const incoming = state.incoming.includes(person.id);
+        const nickname = person.nickname.length > 20 ? `${person.nickname.slice(0, 20)}…` : person.nickname;
         return (
           <div className={`overlay-person${outgoing ? ' outgoing' : ''}${incoming ? ' incoming' : ''}`} key={person.id}>
             <span className="overlay-row">
-              <span className="overlay-name">{person.nickname}</span>
+              <span className="overlay-name" title={person.nickname}>{nickname}</span>
               {person.groups.length > 0 && (
                 <span className="overlay-groups">
                 {person.groups.map((group) => (
