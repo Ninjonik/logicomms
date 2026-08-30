@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Headphones, KeyRound, LogOut, Mic, Plus, Radio, Settings2, Users } from 'lucide-react';
+import { Check, Headphones, KeyRound, LogOut, Mic, Pencil, Plus, Radio, Settings2, Trash2, Users } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -59,8 +59,8 @@ const initial: Preferences = {
 };
 
 const translations = {
-  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
-  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
+  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', rename: 'Rename', remove: 'Remove', removeGroup: 'Remove group?', removeGroupHint: 'Remove “{name}”? Its people and hotkey will be removed.', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
+  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', rename: 'Přejmenovat', remove: 'Odstranit', removeGroup: 'Odstranit skupinu?', removeGroupHint: 'Odstranit „{name}“? Její lidé a klávesová zkratka budou odstraněni.', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
 } as const;
 
 const loadPreferences = (): Preferences => {
@@ -606,6 +606,21 @@ export default function App() {
     setCapturing(id);
   };
 
+  const renameGroup = (group: Group) => {
+    const name = window.prompt(t.groupName, group.name)?.trim();
+    if (name) update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, name } : entry) });
+  };
+
+  const removeGroup = (group: Group) => {
+    const message = t.removeGroupHint.replace('{name}', group.name);
+    if (!window.confirm(`${t.removeGroup}\n\n${message}`)) return;
+    update({ groups: prefs.groups.filter((entry) => entry.id !== group.id) });
+    setTransmitting((value) => value.filter((id) => id !== group.id));
+    void voice?.setTransmitting(group.id, false);
+    if (capturing === group.id) setCapturing(null);
+    if (assigningGroup === group.id) setAssigningGroup(null);
+  };
+
   useEffect(() => {
     if (!capturing) return;
     const timer = window.setTimeout(() => document.getElementById(`hotkey-${capturing}`)?.focus(), 0);
@@ -797,11 +812,7 @@ export default function App() {
                           if (memberId && !group.members.includes(memberId)) update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, members: [...entry.members, memberId] } : entry) });
                         }}>
                           <button className="group-main" onClick={() => setCapturing(group.id)}>
-                      <span className="group-name" onDoubleClick={(event) => {
-                        event.preventDefault(); event.stopPropagation();
-                        const name = window.prompt(t.groupName, group.name)?.trim();
-                        if (name) update({ groups: prefs.groups.map((entry) => entry.id === group.id ? { ...entry, name } : entry) });
-                      }}>
+                      <span className="group-name">
                         {group.name}
                         <small>{group.members.length} people</small>
                       </span>
@@ -809,6 +820,12 @@ export default function App() {
                           </button>
                           <button className="edit" onClick={() => setAssigningGroup(group.id)}>
                             •••
+                          </button>
+                          <button className="group-action" aria-label={`${t.rename} ${group.name}`} title={t.rename} onClick={() => renameGroup(group)}>
+                            <Pencil size={14} />
+                          </button>
+                          <button className="group-action danger" aria-label={`${t.remove} ${group.name}`} title={t.remove} onClick={() => removeGroup(group)}>
+                            <Trash2 size={14} />
                           </button>
                         </div>
                         {false && (
@@ -987,13 +1004,9 @@ export default function App() {
                   <span>+ Add group</span>
                   <Key>…</Key>
                 </button>
-                {[
-                  ...prefs.groups,
-                  { id: 'all', name: 'Everyone', key: prefs.allKey },
-                  { id: 'reply', name: 'Reply', key: prefs.replyKey },
-                ].map((binding) => (
+                {prefs.groups.map((binding) => (
+                  <div className="binding-row" key={binding.id}>
                     <button
-                        key={binding.id}
                         id={`hotkey-${binding.id}`}
                         className="binding"
                         onClick={() => setCapturing(binding.id)}
@@ -1002,6 +1015,18 @@ export default function App() {
                       <span>{binding.name}</span>
                       <Key>{capturing === binding.id ? '…' : binding.key || '—'}</Key>
                     </button>
+                    <button className="binding-action" aria-label={`${t.rename} ${binding.name}`} title={t.rename} onClick={() => renameGroup(binding)}><Pencil size={13} /></button>
+                    <button className="binding-action danger" aria-label={`${t.remove} ${binding.name}`} title={t.remove} onClick={() => removeGroup(binding)}><Trash2 size={13} /></button>
+                  </div>
+                ))}
+                {[
+                  { id: 'all', name: 'Everyone', key: prefs.allKey },
+                  { id: 'reply', name: 'Reply', key: prefs.replyKey },
+                ].map((binding) => (
+                  <button key={binding.id} id={`hotkey-${binding.id}`} className="binding" onClick={() => setCapturing(binding.id)} onKeyDown={(event) => captureKey(binding.id, event)}>
+                    <span>{binding.name}</span>
+                    <Key>{capturing === binding.id ? '…' : binding.key || '—'}</Key>
+                  </button>
                 ))}
               </div>
               <label className="toggle">

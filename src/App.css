@@ -307,6 +307,20 @@ button {
   color: #b4b6ba;
   font-size: 12px;
 }
+.group-action,
+.binding-action {
+  width: 31px;
+  border: 0;
+  border-left: 1px solid #3a3b3f;
+  background: #292a2d;
+  color: #b4b6ba;
+  display: grid;
+  place-items: center;
+}
+.group-action:hover,
+.binding-action:hover { background: #393a3e; color: #fff; }
+.group-action.danger:hover,
+.binding-action.danger:hover { background: #4a2529; color: #ffadb3; }
 .group-key {
   width: 43px;
   border: 0;
@@ -505,6 +519,16 @@ button {
   gap: 4px;
   margin-top: 10px;
 }
+.binding-row { display: flex; min-width: 0; }
+.binding-row .binding { flex: 1; min-width: 0; }
+.binding-action {
+  border: 1px solid #515358;
+  border-left: 0;
+  border-radius: 0;
+  width: 30px;
+}
+.binding-row .binding { border-radius: 2px 0 0 2px; }
+.binding-row .binding-action:last-child { border-radius: 0 2px 2px 0; }
 .binding {
   display: flex;
   align-items: center;
