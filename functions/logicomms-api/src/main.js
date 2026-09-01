@@ -6,7 +6,7 @@ const LOBBIES_TABLE_ID = 'lobbies';
 const MEMBERS_TABLE_ID = 'members';
 // This only protects against an app crash that cannot send leaveLobby; normal
 // joins and leaves are driven directly by Realtime events.
-const STALE_MEMBER_AFTER_MS = 15_000;
+const STALE_MEMBER_AFTER_MS = 45_000;
 const ADJECTIVES = ['amber', 'brisk', 'calm', 'cinder', 'clear', 'copper', 'crimson', 'distant', 'eager', 'frosty', 'golden', 'granite', 'hidden', 'iron', 'ivory', 'lunar', 'misty', 'noble', 'quiet', 'rapid', 'silver', 'solid', 'swift', 'violet'];
 const NOUNS = ['anchor', 'badger', 'beacon', 'cedar', 'comet', 'falcon', 'forest', 'harbor', 'kestrel', 'lantern', 'maple', 'meadow', 'otter', 'pioneer', 'raven', 'ridge', 'summit', 'thistle', 'valley', 'willow', 'wolf', 'wren'];
 
@@ -119,6 +119,23 @@ async function joinLobby(tables, actorId, body) {
   return lobbyState(tables, code);
 }
 
+// Presence is intentionally separate from lobby updates: it keeps an active
+// member from being pruned without publishing a Realtime event every few
+// seconds. Realtime remains the sole UI update mechanism for joins/leaves.
+async function heartbeatLobby(tables, actorId, body) {
+  const code = lobbyCode(body.code);
+  const displayName = nickname(body.nickname);
+  const existing = (await listMembers(tables, code)).find((member) => member.userId === actorId);
+  if (!existing) throw new Error('Join the lobby before sending presence.');
+  await tables.updateRow({
+    databaseId: DATABASE_ID,
+    tableId: MEMBERS_TABLE_ID,
+    rowId: existing.$id,
+    data: { lobbyId: code, userId: actorId, nickname: displayName, livekitIdentity: `u_${actorId}`, lastSeenAt: now() },
+  });
+  return { code, alive: true };
+}
+
 async function leaveLobby(tables, actorId, body) {
   const code = lobbyCode(body.code);
   const members = await listMembers(tables, code);
@@ -170,7 +187,8 @@ export default async ({ req, res, error }) => {
     const actorId = userId(req);
     let data;
     if (body.action === 'createLobby') data = await createLobby(tables, actorId, body);
-    else if (body.action === 'joinLobby' || body.action === 'heartbeat') data = await joinLobby(tables, actorId, body);
+    else if (body.action === 'joinLobby') data = await joinLobby(tables, actorId, body);
+    else if (body.action === 'heartbeat') data = await heartbeatLobby(tables, actorId, body);
     else if (body.action === 'leaveLobby') data = await leaveLobby(tables, actorId, body);
     else if (body.action === 'getLobby') data = await lobbyState(tables, normalizeCode(body.code));
     else if (body.action === 'livekitToken') data = await issueLiveKitToken(tables, actorId, body);

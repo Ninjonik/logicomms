@@ -361,6 +361,17 @@ export default function App() {
     if (isTauri()) void (prefs.launchAtLogin ? enable() : disable()).catch(() => undefined);
   }, [prefs.launchAtLogin]);
 
+  // This is presence maintenance only. It never reads the lobby or updates
+  // the UI; Realtime is still the only source of join/leave UI changes.
+  useEffect(() => {
+    if (!lobby) return;
+    const heartbeat = () => void callLobbyApi({ action: 'heartbeat', code: lobby.code, nickname: prefs.nickname })
+        .catch((caught) => setStatus(caught.message));
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 15_000);
+    return () => window.clearInterval(timer);
+  }, [lobby?.code, prefs.nickname]);
+
   // The lobby row is updated by the API for every join and leave, so one
   // Realtime subscription is sufficient to receive membership changes.
   useEffect(() => {
