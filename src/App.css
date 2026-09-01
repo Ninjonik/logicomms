@@ -588,17 +588,17 @@ button {
 .overlay-person {
   padding: 3px 8px 3px 14px;
   border-left: 2px solid transparent;
-  background: #191a1dbb;
+  background: #1011142e;
 }
 .overlay-group-card {
   width: max-content;
   min-width: 130px;
   margin: 5px 0;
   overflow: hidden;
-  border: 1px solid #ffffff20;
+  border: 1px solid #ffffff2b;
   border-radius: 4px;
-  background: #151619cc;
-  box-shadow: 0 2px 8px #0005;
+  background: #10111424;
+  box-shadow: 0 1px 5px #0004;
 }
 .overlay-group-heading {
   display: flex;
@@ -606,7 +606,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   padding: 5px 8px;
-  background: #2e3430e8;
+  background: #1c241b63;
   color: #f2f4f6;
   font-size: 10px;
   font-weight: 700;
@@ -625,6 +625,7 @@ button {
 }
 .overlay-name {
   white-space: nowrap;
+  text-shadow: 0 1px 2px #000;
 }
 .overlay-scale-control {
   position: relative;
@@ -650,13 +651,13 @@ button {
 .microphone-test button { margin-top: 8px; text-align: center; }
 .overlay-person.outgoing {
   border-left-color: #69bd7b;
-  background: #23452bcc;
+  background: #2b783744;
 }
 .overlay-person.incoming {
   border-left-color: #ee7078;
-  background: #54282dcc;
+  background: #8e303844;
 }
 .overlay-person.outgoing.incoming {
   border-left-color: #e4bd62;
-  background: #544526cc;
+  background: #8b6b2444;
 }
