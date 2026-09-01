@@ -45,8 +45,8 @@ type Device = { deviceId: string; label: string };
 
 const initial: Preferences = {
   nickname: '',
-  input: 'Default — Microphone',
-  output: 'Default — Headphones',
+  input: 'Default Input',
+  output: 'Default Output',
   inputVolume: 100,
   outputVolume: 100,
   playerVolumes: {},
