@@ -586,37 +586,45 @@ button {
   background: transparent !important;
 }
 .overlay-person {
-  width: max-content;
-  min-width: 110px;
-  margin: 4px 0;
-  padding: 6px 10px;
-  border-radius: 3px;
-  background: #191a1d88;
+  padding: 3px 8px 3px 14px;
+  border-left: 2px solid transparent;
+  background: #191a1dbb;
 }
-.overlay-row {
+.overlay-group-card {
+  width: max-content;
+  min-width: 130px;
+  margin: 5px 0;
+  overflow: hidden;
+  border: 1px solid #ffffff20;
+  border-radius: 4px;
+  background: #151619cc;
+  box-shadow: 0 2px 8px #0005;
+}
+.overlay-group-heading {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  background: #2e3430e8;
+  color: #f2f4f6;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.overlay-group-heading kbd {
+  min-width: 17px;
+  padding: 1px 4px;
+  border: 1px solid #99bb9b88;
+  border-radius: 2px;
+  background: #1b261dee;
+  color: #d9f0db;
+  font: 10px Consolas, monospace;
+  text-align: center;
 }
 .overlay-name {
   white-space: nowrap;
-}
-.overlay-groups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-.overlay-group {
-  padding: 1px 4px;
-  border-radius: 2px;
-  background: #6d717755;
-  color: #d7d9dc;
-  font-size: 9px;
-  line-height: 13px;
-}
-.overlay-group.active {
-  background: #51b96cbb;
-  color: #fff;
 }
 .overlay-scale-control {
   position: relative;
@@ -641,11 +649,14 @@ button {
 .microphone-meter i { display: block; width: 100%; height: 100%; transform-origin: left; background: linear-gradient(90deg, #69bd7b, #d9c963, #df7373); transition: transform 70ms linear; }
 .microphone-test button { margin-top: 8px; text-align: center; }
 .overlay-person.outgoing {
-  background: #3b9b5488;
+  border-left-color: #69bd7b;
+  background: #23452bcc;
 }
 .overlay-person.incoming {
-  background: #c94c5688;
+  border-left-color: #ee7078;
+  background: #54282dcc;
 }
 .overlay-person.outgoing.incoming {
-  background: #c99b3d88;
+  border-left-color: #e4bd62;
+  background: #544526cc;
 }

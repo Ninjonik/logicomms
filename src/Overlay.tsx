@@ -1,12 +1,14 @@
 import { listen } from '@tauri-apps/api/event';
 import { useEffect, useState } from 'react';
 
-type GroupBadge = { id: string; name: string };
-type Person = { id: string; nickname: string; groups: GroupBadge[] };
-type OverlayState = { people: Person[]; outgoing: string[]; incoming: string[]; activeGroups: string[] };
+type Person = { id: string; nickname: string };
+type Group = { id: string; name: string; key: string; people: Person[] };
+type OverlayState = { groups: Group[]; outgoing: string[]; incoming: string[] };
+
+const shorten = (value: string, limit: number) => value.length > limit ? `${value.slice(0, limit)}…` : value;
 
 export function Overlay() {
-  const [state, setState] = useState<OverlayState>({ people: [], outgoing: [], incoming: [], activeGroups: [] });
+  const [state, setState] = useState<OverlayState>({ groups: [], outgoing: [], incoming: [] });
 
   useEffect(() => {
     document.body.classList.add('overlay-window');
@@ -22,25 +24,23 @@ export function Overlay() {
 
   return (
     <main className="voice-overlay">
-      {state.people.map((person) => {
-        const outgoing = state.outgoing.includes(person.id);
-        const incoming = state.incoming.includes(person.id);
-        const nickname = person.nickname.length > 20 ? `${person.nickname.slice(0, 20)}…` : person.nickname;
-        return (
-          <div className={`overlay-person${outgoing ? ' outgoing' : ''}${incoming ? ' incoming' : ''}`} key={person.id}>
-            <span className="overlay-row">
-              <span className="overlay-name" title={person.nickname}>{nickname}</span>
-              {person.groups.length > 0 && (
-                <span className="overlay-groups">
-                {person.groups.map((group) => (
-                  <span className={`overlay-group${state.activeGroups.includes(group.id) ? ' active' : ''}`} key={group.id}>{group.name}</span>
-                ))}
-                </span>
-              )}
-            </span>
-          </div>
-        );
-      })}
+      {state.groups.map((group) => (
+        <section className="overlay-group-card" key={group.id}>
+          <header className="overlay-group-heading">
+            <span title={group.name}>{shorten(group.name, 20)}</span>
+            {group.key && <kbd>{shorten(group.key.replace(/^Key/i, '').replace(/^Digit/i, ''), 8)}</kbd>}
+          </header>
+          {group.people.map((person) => {
+            const outgoing = state.outgoing.includes(person.id);
+            const incoming = state.incoming.includes(person.id);
+            return (
+              <div className={`overlay-person${outgoing ? ' outgoing' : ''}${incoming ? ' incoming' : ''}`} key={person.id}>
+                <span className="overlay-name" title={person.nickname}>{shorten(person.nickname, 20)}</span>
+              </div>
+            );
+          })}
+        </section>
+      ))}
     </main>
   );
 }

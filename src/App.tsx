@@ -61,8 +61,8 @@ const initial: Preferences = {
 };
 
 const translations = {
-  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', rename: 'Rename', remove: 'Remove', removeGroup: 'Remove group?', removeGroupHint: 'Remove “{name}”? Its people and hotkey will be removed.', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby name', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
-  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', rename: 'Přejmenovat', remove: 'Odstranit', removeGroup: 'Odstranit skupinu?', removeGroupHint: 'Odstranit „{name}“? Její lidé a klávesová zkratka budou odstraněni.', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní název místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
+  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', rename: 'Rename', remove: 'Remove', removeGroup: 'Remove group?', removeGroupHint: 'Remove “{name}”? Its people and hotkey will be removed.', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby code', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
+  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', rename: 'Přejmenovat', remove: 'Odstranit', removeGroup: 'Odstranit skupinu?', removeGroupHint: 'Odstranit „{name}“? Její lidé a klávesová zkratka budou odstraněni.', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní kód místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
 } as const;
 
 const loadPreferences = (): Preferences => {
@@ -361,34 +361,32 @@ export default function App() {
     if (isTauri()) void (prefs.launchAtLogin ? enable() : disable()).catch(() => undefined);
   }, [prefs.launchAtLogin]);
 
+  // The lobby row is updated by the API for every join and leave, so one
+  // Realtime subscription is sufficient to receive membership changes.
   useEffect(() => {
     if (!lobby) return;
-    const timer = window.setInterval(() => {
-      void callLobbyApi<Lobby>({ action: 'heartbeat', code: lobby.code, nickname: prefs.nickname })
-          .then(setLobby)
-          .catch((caught) => setStatus(caught.message));
-    }, 15_000);
-    return () => window.clearInterval(timer);
-  }, [lobby?.code, prefs.nickname]);
-
-  // Realtime updates make joins/leaves visible immediately. The heartbeat is
-  // still retained above solely to expire abandoned lobby memberships.
-  useEffect(() => {
-    if (!lobby) return;
+    let active = true;
     let refreshQueued = false;
     const refresh = () => {
-      if (refreshQueued) return;
+      if (!active || refreshQueued) return;
       refreshQueued = true;
       window.setTimeout(() => {
+        if (!active) return;
         refreshQueued = false;
         void callLobbyApi<Lobby>({ action: 'getLobby', code: lobby.code })
             .then((nextLobby) => {
-              if (nextLobby) setLobby(nextLobby);
+              // A callback can have been queued before Leave completed. Never
+              // let that stale request resurrect a lobby after cleanup.
+              if (active && nextLobby) setLobby(nextLobby);
             })
             .catch(() => undefined);
       }, 0);
     };
-    return subscribeToLobby(lobby.code, refresh);
+    const unsubscribe = subscribeToLobby(lobby.code, refresh);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [lobby?.code]);
 
   useEffect(() => {
@@ -511,6 +509,10 @@ export default function App() {
     setBusy(true);
     try {
       await callLobbyApi({ action: 'leaveLobby', code: lobby.code });
+      // A startup rejoin dialog may still be queued while the app is joining.
+      // Leaving is an explicit opt-out, so cancel it before rendering the
+      // disconnected state where that dialog would otherwise reappear.
+      setRejoinPrompt(null);
       setLobby(null);
       setTransmitting([]);
       setIncomingTalkers([]);
@@ -589,18 +591,18 @@ export default function App() {
   useEffect(() => {
     if (!isTauri()) return;
     const publish = () => void emitTo('overlay', 'overlay-state', {
-      people: (lobby?.members ?? [])
-          .filter((member) => member.userId !== userId)
-          .map((member) => ({
-            id: member.userId,
-            nickname: member.nickname,
-            groups: prefs.groups
-                .filter((group) => group.members.includes(member.userId))
-                .map((group) => ({ id: group.id, name: group.name })),
-          })),
+      groups: prefs.groups
+          .map((group) => ({
+            id: group.id,
+            name: group.name,
+            key: group.key,
+            people: (lobby?.members ?? [])
+                .filter((member) => member.userId !== userId && group.members.includes(member.userId))
+                .map((member) => ({ id: member.userId, nickname: member.nickname })),
+          }))
+          .filter((group) => group.people.length > 0),
       outgoing: [...outgoingTargets],
       incoming: incomingTalkers,
-      activeGroups: transmitting,
     }).catch(() => undefined);
     publish();
     const timer = window.setInterval(publish, 1000);

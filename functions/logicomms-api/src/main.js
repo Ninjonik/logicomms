@@ -4,7 +4,9 @@ import { AccessToken } from 'livekit-server-sdk';
 const DATABASE_ID = 'logicomms';
 const LOBBIES_TABLE_ID = 'lobbies';
 const MEMBERS_TABLE_ID = 'members';
-const STALE_MEMBER_AFTER_MS = 45_000;
+// This only protects against an app crash that cannot send leaveLobby; normal
+// joins and leaves are driven directly by Realtime events.
+const STALE_MEMBER_AFTER_MS = 15_000;
 const ADJECTIVES = ['amber', 'brisk', 'calm', 'cinder', 'clear', 'copper', 'crimson', 'distant', 'eager', 'frosty', 'golden', 'granite', 'hidden', 'iron', 'ivory', 'lunar', 'misty', 'noble', 'quiet', 'rapid', 'silver', 'solid', 'swift', 'violet'];
 const NOUNS = ['anchor', 'badger', 'beacon', 'cedar', 'comet', 'falcon', 'forest', 'harbor', 'kestrel', 'lantern', 'maple', 'meadow', 'otter', 'pioneer', 'raven', 'ridge', 'summit', 'thistle', 'valley', 'willow', 'wolf', 'wren'];
 
@@ -61,6 +63,9 @@ async function pruneLobby(tables, lobbyId) {
   await Promise.all(stale.map((member) => tables.deleteRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: member.$id })));
   const remaining = members.filter((member) => !stale.includes(member));
   if (remaining.length === 0 && (await getLobby(tables, lobbyId))) await tables.deleteRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: lobbyId });
+  // Member rows are private, so clients subscribe to the readable lobby row.
+  // Touch it whenever pruning changes membership to publish that change.
+  else if (stale.length > 0) await tables.updateRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: lobbyId, data: { lastActiveAt: now() }, permissions: lobbyReadPermissions });
   return remaining;
 }
 
@@ -119,6 +124,9 @@ async function leaveLobby(tables, actorId, body) {
   const members = await listMembers(tables, code);
   await Promise.all(members.filter((member) => member.userId === actorId).map((member) => tables.deleteRow({ databaseId: DATABASE_ID, tableId: MEMBERS_TABLE_ID, rowId: member.$id })));
   if ((await listMembers(tables, code)).length === 0 && (await getLobby(tables, code))) await tables.deleteRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code });
+  // Publishing a lobby update makes a normal leave visible to every client
+  // immediately; previously only the deleted private member row changed.
+  else if (await getLobby(tables, code)) await tables.updateRow({ databaseId: DATABASE_ID, tableId: LOBBIES_TABLE_ID, rowId: code, data: { lastActiveAt: now() }, permissions: lobbyReadPermissions });
   return { code, left: true };
 }
 
