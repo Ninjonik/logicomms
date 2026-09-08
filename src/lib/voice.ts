@@ -1,13 +1,17 @@
 import { Room, RoomEvent, Track } from 'livekit-client';
-import type { LocalTrackPublication, RemoteAudioTrack, RemoteParticipant } from 'livekit-client';
+import type { LocalTrackPublication, RemoteAudioTrack } from 'livekit-client';
 
 export type VoiceCredentials = { url: string; token: string };
 export type VoiceRoute = { id: string; targets: string[] };
-type RouteSignal = { type: 'start' | 'stop'; trackSid: string; targets: string[] };
+const TARGET_TRACK_PREFIX = 'logicomms:to:';
 
 export class VoiceConnection {
   readonly room = new Room({ adaptiveStream: true, dynacast: true });
+  // Each recipient gets their own publication. A recipient's client only
+  // attaches publications addressed to its own identity, so playback no
+  // longer depends on a separate, racy route-control data message.
   private publications = new Map<string, LocalTrackPublication>();
+  private pendingPublications = new Map<string, Promise<LocalTrackPublication | undefined>>();
   private routes = new Map<string, VoiceRoute>();
   private source?: MediaStreamTrack;
   private processedSource?: MediaStreamTrack;
@@ -18,9 +22,14 @@ export class VoiceConnection {
   private remoteTrackOwners = new Map<string, string>();
   private remoteAudioContext?: AudioContext;
   private participantVolumes = new Map<string, number>();
-  private activeBySender = new Map<string, Set<string>>();
-  private selectedBySender = new Map<string, string>();
-  private routeByTrack = new Map<string, { sender: string; targeted: boolean }>();
+  private incomingTracksBySender = new Map<string, Set<string>>();
+  private activeTargets = new Map<string, Set<string>>();
+  private targetActiveCounts = new Map<string, number>();
+  // Publication and microphone setup are async. Serialize both configuration
+  // and PTT transitions so a fast key press cannot race track creation or a
+  // matching key release.
+  private configurationQueue: Promise<void> = Promise.resolve();
+  private transmissionQueue: Promise<void> = Promise.resolve();
   private lastCaller?: string;
   private inputDeviceId = 'default';
   private outputDeviceId = 'default';
@@ -32,14 +41,10 @@ export class VoiceConnection {
     private readonly onReplyTarget: (identity?: string) => void = () => undefined,
   ) {
     this.room.on(RoomEvent.ConnectionStateChanged, (state) => onState(`Voice: ${state}`));
-    this.room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
-      if (topic !== 'logicomms.route' || !participant) return;
-      try { this.applySignal(participant, JSON.parse(new TextDecoder().decode(payload)) as RouteSignal); } catch { /* Ignore foreign data. */ }
-    });
     this.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind !== Track.Kind.Audio) return;
+      if (!this.isAddressedToMe(publication.trackName)) return;
       const audio = track as RemoteAudioTrack;
-      audio.setMuted(true);
       void audio.setSinkId(this.outputDeviceId).catch(() => undefined);
       this.remoteAudioContext ??= new AudioContext();
       audio.setAudioContext(this.remoteAudioContext);
@@ -48,12 +53,19 @@ export class VoiceConnection {
       this.remoteTracks.set(publication.trackSid, audio);
       this.remoteTrackOwners.set(publication.trackSid, participant.identity);
       this.applyTrackVolume(publication.trackSid);
-      this.refreshSender(participant.identity);
+      this.setIncomingTrackActivity(participant.identity, publication.trackSid, !publication.isMuted);
     });
     this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
       if (track.kind !== Track.Kind.Audio) return;
       (track as RemoteAudioTrack).detach().forEach((element) => element.remove());
-      this.remoteTracks.delete(publication.trackSid); this.remoteElements.delete(publication.trackSid); this.remoteTrackOwners.delete(publication.trackSid); this.routeByTrack.delete(publication.trackSid); this.refreshSender(participant.identity);
+      this.remoteTracks.delete(publication.trackSid); this.remoteElements.delete(publication.trackSid); this.remoteTrackOwners.delete(publication.trackSid);
+      this.setIncomingTrackActivity(participant.identity, publication.trackSid, false);
+    });
+    this.room.on(RoomEvent.TrackMuted, (publication, participant) => {
+      if (publication.kind === Track.Kind.Audio && this.isAddressedToMe(publication.trackName)) this.setIncomingTrackActivity(participant.identity, publication.trackSid, false);
+    });
+    this.room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
+      if (publication.kind === Track.Kind.Audio && this.isAddressedToMe(publication.trackName)) this.setIncomingTrackActivity(participant.identity, publication.trackSid, true);
     });
     this.room.on(RoomEvent.Disconnected, () => onState('Voice disconnected'));
   }
@@ -67,9 +79,17 @@ export class VoiceConnection {
   }
 
   async configure(routes: VoiceRoute[], inputDeviceId = 'default') {
+    const configuration = this.configurationQueue
+      .catch(() => undefined)
+      .then(() => this.configureNow(routes, inputDeviceId));
+    this.configurationQueue = configuration;
+    await configuration;
+  }
+
+  private async configureNow(routes: VoiceRoute[], inputDeviceId: string) {
     if (this.source && this.inputDeviceId !== inputDeviceId) {
       await Promise.all([...this.publications.values()].map((publication) => publication.track ? this.room.localParticipant.unpublishTrack(publication.track) : Promise.resolve(undefined)));
-      this.publications.clear(); this.source.stop(); this.processedSource?.stop(); this.audioContext?.close().catch(() => undefined); this.source = undefined; this.processedSource = undefined; this.audioContext = undefined; this.inputGain = undefined;
+      this.publications.clear(); this.activeTargets.clear(); this.targetActiveCounts.clear(); this.source.stop(); this.processedSource?.stop(); this.audioContext?.close().catch(() => undefined); this.source = undefined; this.processedSource = undefined; this.audioContext = undefined; this.inputGain = undefined;
     }
     this.inputDeviceId = inputDeviceId;
     this.routes = new Map(routes.map((route) => [route.id, route]));
@@ -83,11 +103,11 @@ export class VoiceConnection {
       sourceNode.connect(this.inputGain).connect(destination);
       this.processedSource = destination.stream.getAudioTracks()[0];
     }
-    for (const route of routes) {
-      if (this.publications.has(route.id) || !this.source) continue;
-      const publication = await this.room.localParticipant.publishTrack((this.processedSource ?? this.source).clone(), { name: `logicomms:${route.id}` });
-      await publication.mute();
-      this.publications.set(route.id, publication);
+    const targets = new Set(routes.flatMap((route) => route.targets));
+    for (const target of targets) {
+      const publication = await this.ensurePublication(target);
+      if (!publication) continue;
+      if ((this.targetActiveCounts.get(target) ?? 0) > 0) await publication.unmute();
     }
   }
 
@@ -122,36 +142,73 @@ export class VoiceConnection {
   }
 
   async setTransmitting(routeId: string, active: boolean, replyTarget?: string) {
-    const publication = this.publications.get(routeId);
-    if (!publication) return;
-    const route = this.routes.get(routeId);
-    const recipient = replyTarget ?? this.lastCaller;
-    const targets = routeId === 'reply' ? (recipient ? [recipient] : []) : route?.targets ?? [];
-    if (!targets.length) return;
-    if (active) await publication.unmute(); else await publication.mute();
-    await this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: active ? 'start' : 'stop', trackSid: publication.trackSid, targets } satisfies RouteSignal)), { reliable: true, topic: 'logicomms.route' });
+    const transition = this.transmissionQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const currentTargets = this.activeTargets.get(routeId);
+        if (active) {
+          // A repeated key-down must not increment the same recipients twice.
+          if (currentTargets) return;
+          const route = this.routes.get(routeId);
+          const recipient = replyTarget ?? this.lastCaller;
+          const targets = new Set(routeId === 'reply' ? (recipient ? [recipient] : []) : route?.targets ?? []);
+          if (!targets.size) return;
+          this.activeTargets.set(routeId, targets);
+          for (const target of targets) await this.changeTargetActivity(target, 1);
+          return;
+        }
+
+        if (!currentTargets) return;
+        for (const target of currentTargets) await this.changeTargetActivity(target, -1);
+        this.activeTargets.delete(routeId);
+      });
+    this.transmissionQueue = transition;
+    await transition;
   }
 
-  private applySignal(participant: RemoteParticipant, signal: RouteSignal) {
-    const targeted = signal.targets.includes(this.room.localParticipant.identity);
-    this.routeByTrack.set(signal.trackSid, { sender: participant.identity, targeted });
-    const active = this.activeBySender.get(participant.identity) ?? new Set<string>();
-    if (signal.type === 'start' && targeted) {
-      active.add(signal.trackSid);
-      this.lastCaller = participant.identity;
-      this.onReplyTarget(participant.identity);
-    }
-    else active.delete(signal.trackSid);
-    this.activeBySender.set(participant.identity, active); this.refreshSender(participant.identity);
-    this.onIncomingActivity(participant.identity, active.size > 0);
+  private async changeTargetActivity(target: string, delta: 1 | -1) {
+    const current = this.targetActiveCounts.get(target) ?? 0;
+    const next = Math.max(0, current + delta);
+    if (next === 0) this.targetActiveCounts.delete(target); else this.targetActiveCounts.set(target, next);
+    const publication = this.publications.get(target) ?? (next > 0 ? await this.ensurePublication(target) : undefined);
+    if (!publication || current === next) return;
+    if (current === 0 && next > 0) await publication.unmute();
+    else if (current > 0 && next === 0) await publication.mute();
   }
 
-  private refreshSender(sender: string) {
-    const active = this.activeBySender.get(sender) ?? new Set<string>();
-    let selected = this.selectedBySender.get(sender);
-    if (!selected || !active.has(selected) || !this.remoteTracks.has(selected)) selected = [...active].find((sid) => this.remoteTracks.has(sid));
-    if (selected) this.selectedBySender.set(sender, selected); else this.selectedBySender.delete(sender);
-    for (const [sid, audio] of this.remoteTracks) if (this.routeByTrack.get(sid)?.sender === sender) audio.setMuted(sid !== selected);
+  private isAddressedToMe(trackName: string) {
+    return trackName === `${TARGET_TRACK_PREFIX}${this.room.localParticipant.identity}`;
+  }
+
+  private async ensurePublication(target: string) {
+    const existing = this.publications.get(target);
+    if (existing) return existing;
+    const pending = this.pendingPublications.get(target);
+    if (pending) return pending;
+    if (!this.source) return undefined;
+    const creation = (async () => {
+      const publication = await this.room.localParticipant.publishTrack(
+        (this.processedSource ?? this.source!).clone(),
+        { name: `${TARGET_TRACK_PREFIX}${target}` },
+      );
+      this.publications.set(target, publication);
+      await publication.mute();
+      return publication;
+    })();
+    this.pendingPublications.set(target, creation);
+    try { return await creation; }
+    finally { this.pendingPublications.delete(target); }
+  }
+
+  private setIncomingTrackActivity(sender: string, sid: string, active: boolean) {
+    const tracks = this.incomingTracksBySender.get(sender) ?? new Set<string>();
+    if (active) {
+      tracks.add(sid);
+      this.lastCaller = sender;
+      this.onReplyTarget(sender);
+    } else tracks.delete(sid);
+    if (tracks.size) this.incomingTracksBySender.set(sender, tracks); else this.incomingTracksBySender.delete(sender);
+    this.onIncomingActivity(sender, tracks.size > 0);
   }
 
   disconnect() { this.source?.stop(); this.processedSource?.stop(); void this.audioContext?.close(); void this.remoteAudioContext?.close(); this.room.disconnect(); }

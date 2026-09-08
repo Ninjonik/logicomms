@@ -140,6 +140,29 @@ export default function App() {
     localStorage.setItem('logicomms:preferences', JSON.stringify(prefs));
   }, [prefs]);
 
+  // A key may only control one route. Previously the PTT listener started
+  // every matching binding, so a group sharing a key with Everyone silently
+  // broadcast to the whole lobby. Keep groups ahead of the built-ins when
+  // repairing existing saved preferences: that is the least surprising and
+  // safest outcome for an old collision.
+  useEffect(() => {
+    const used = new Set<string>();
+    const reserve = (key: string) => {
+      const normalised = normaliseKey(key);
+      if (!normalised || !used.has(normalised)) {
+        if (normalised) used.add(normalised);
+        return key;
+      }
+      return '';
+    };
+    const groups = prefs.groups.map((group) => ({ ...group, key: reserve(group.key) }));
+    const allKey = reserve(prefs.allKey);
+    const replyKey = reserve(prefs.replyKey);
+    if (groups.some((group, index) => group.key !== prefs.groups[index]?.key) || allKey !== prefs.allKey || replyKey !== prefs.replyKey) {
+      update({ groups, allKey, replyKey });
+    }
+  }, [prefs.groups, prefs.allKey, prefs.replyKey]);
+
   // A lobby is only the live presence list.  Add everyone we meet to local
   // preferences, but never remove them here: assignments must remain
   // adjustable after somebody disconnects.
@@ -306,6 +329,7 @@ export default function App() {
 
   useEffect(() => {
     if (!lobby) return;
+    let disposed = false;
     const connection = new VoiceConnection(setStatus, (identity, active) => {
       const memberId = identity.replace(/^u_/, '');
       setIncomingTalkers((current) => active ? [...new Set([...current, memberId])] : current.filter((id) => id !== memberId));
@@ -313,10 +337,17 @@ export default function App() {
     void callLobbyApi<VoiceCredentials>({ action: 'livekitToken', code: lobby.code })
         .then(async (credentials) => {
           await connection.connect(credentials);
+          if (disposed) {
+            connection.disconnect();
+            return;
+          }
           setVoice(connection);
         })
-        .catch((caught) => setStatus(`Voice unavailable: ${caught.message}`));
+        .catch((caught) => {
+          if (!disposed) setStatus(`Voice unavailable: ${caught.message}`);
+        });
     return () => {
+      disposed = true;
       setVoice(null);
       setIncomingTalkers([]);
       setReplyTarget(null);
@@ -448,7 +479,12 @@ export default function App() {
       } else {
         if (!pressedKeysRef.current.delete(received)) return;
       }
-      const ids = bindings.filter((binding) => normaliseKey(binding.key) === received).map((binding) => binding.id);
+      const matching = bindings.filter((binding) => normaliseKey(binding.key) === received);
+      // Defensive handling for a pre-update client preference that has not
+      // been normalised yet. Never turn one press into a broadcast.
+      const ids = matching.length > 1
+        ? [matching.find((binding) => binding.id !== 'all' && binding.id !== 'reply') ?? matching[0]].map((binding) => binding.id)
+        : matching.map((binding) => binding.id);
       ids.forEach((id) => {
         void voiceRef.current?.setTransmitting(id, pressed);
       });
@@ -654,14 +690,25 @@ export default function App() {
         return active ? [...value, id] : value.filter((entry) => entry !== id);
       });
 
+  const assignHotkey = (id: string, key: string) => {
+    const normalised = normaliseKey(key);
+    const removeCollision = (candidate: string, candidateId: string) => candidateId !== id && normaliseKey(candidate) === normalised ? '' : candidate;
+    update({
+      groups: prefs.groups.map((group) => ({
+        ...group,
+        key: group.id === id ? key : removeCollision(group.key, group.id),
+      })),
+      allKey: id === 'all' ? key : removeCollision(prefs.allKey, 'all'),
+      replyKey: id === 'reply' ? key : removeCollision(prefs.replyKey, 'reply'),
+    });
+  };
+
   const captureKey = (id: string, event: React.KeyboardEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (!capturing) return;
     const key = event.code || event.key;
     if (!key) return;
-    if (id === 'all') update({ allKey: key });
-    else if (id === 'reply') update({ replyKey: key });
-    else update({ groups: prefs.groups.map((group) => (group.id === id ? { ...group, key } : group)) });
+    assignHotkey(id, key);
     setCapturing(null);
   };
 
@@ -671,9 +718,7 @@ export default function App() {
       event.preventDefault();
       const key = event.code || event.key;
       if (!key) return;
-      if (capturing === 'all') update({ allKey: key });
-      else if (capturing === 'reply') update({ replyKey: key });
-      else update({ groups: prefs.groups.map((group) => group.id === capturing ? { ...group, key } : group) });
+      assignHotkey(capturing, key);
       setCapturing(null);
     };
     window.addEventListener('keydown', assign, true);
