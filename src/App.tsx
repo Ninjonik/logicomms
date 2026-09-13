@@ -683,13 +683,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [capturing]);
 
-  const toggle = (id: string) =>
-      setTransmitting((value) => {
-        const active = !value.includes(id);
-        void voice?.setTransmitting(id, active);
-        return active ? [...value, id] : value.filter((entry) => entry !== id);
-      });
-
   const assignHotkey = (id: string, key: string) => {
     const normalised = normaliseKey(key);
     const removeCollision = (candidate: string, candidateId: string) => candidateId !== id && normaliseKey(candidate) === normalised ? '' : candidate;
@@ -970,13 +963,13 @@ export default function App() {
               </section>
 
               <section className="quick-actions">
-                <button onClick={() => toggle('all')}>
+                <button onClick={() => setCapturing('all')}>
               <span>
                 <Headphones size={15} /> Everyone
               </span>
                   <Key active={transmitting.includes('all')}>{prefs.allKey}</Key>
                 </button>
-                <button onClick={() => toggle('reply')}>
+                <button onClick={() => setCapturing('reply')}>
               <span>
                 <Mic size={15} /> Reply
               </span>
