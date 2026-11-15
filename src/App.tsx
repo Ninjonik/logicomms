@@ -21,7 +21,7 @@ type Group = { id: string; name: string; key: string; members: string[] };
 // Groups are deliberately local preferences.  Keep a tiny address book beside
 // them so a member can still be edited after they have left the lobby.
 type KnownPerson = { userId: string; nickname: string };
-type Language = 'en' | 'cs';
+import { translations, languages, type Language } from './translations';
 type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type Preferences = {
   nickname: string;
@@ -38,6 +38,7 @@ type Preferences = {
   autoUpdate: boolean;
   overlayPosition: OverlayPosition;
   overlayScale: number;
+  overlayEnabled: boolean;
   language?: Language;
   lastLobbyCode?: string;
 };
@@ -56,20 +57,20 @@ const initial: Preferences = {
   autoUpdate: true,
   overlayPosition: 'top-left',
   overlayScale: 100,
+  overlayEnabled: true,
   groups: [],
   people: [],
 };
 
-const translations = {
-  en: { language: 'Language', chooseLanguage: 'Choose your language', languageHint: 'You can change this later in Settings.', english: 'English', czech: 'Čeština', settings: 'Settings', done: 'Done', people: 'People', inLobby: 'in this lobby', yourGroups: 'Your groups', group: 'Group', groupName: 'Group name', hotkey: 'Hotkey', assignPeople: 'Assign people', addGroup: 'Add group', rename: 'Rename', remove: 'Remove', removeGroup: 'Remove group?', removeGroupHint: 'Remove “{name}”? Its people and hotkey will be removed.', waiting: 'Press a key to assign it', cancel: 'Cancel', savedLocally: 'Saved locally — connected people appear first', savedPerson: 'Saved person', inThisLobby: 'In this lobby', add: 'Add', added: 'Added', noPeople: 'People you meet in a lobby will stay available here.', languageSetting: 'Language', inputDevice: 'Input device', outputDevice: 'Output device', startWindows: 'Start with Windows', autoUpdates: 'Automatically check for updates on launch', overlayPosition: 'Overlay position', overlaySize: 'Overlay size', everyone: 'Everyone', reply: 'Reply', leave: 'Leave', lobby: 'Lobby', lobbyCode: 'Lobby code', joinLobby: 'Join lobby', createLobby: 'Create lobby', nickname: 'Nickname', yourNickname: 'Your nickname', customLobby: 'Custom lobby code', optional: 'optional', connected: 'Connected', assign: 'Assign people' },
-  cs: { language: 'Jazyk', chooseLanguage: 'Vyberte jazyk', languageHint: 'Později ho můžete změnit v Nastavení.', english: 'English', czech: 'Čeština', settings: 'Nastavení', done: 'Hotovo', people: 'Lidé', inLobby: 'v této místnosti', yourGroups: 'Vaše skupiny', group: 'Skupina', groupName: 'Název skupiny', hotkey: 'Klávesová zkratka', assignPeople: 'Přiřadit lidi', addGroup: 'Přidat skupinu', rename: 'Přejmenovat', remove: 'Odstranit', removeGroup: 'Odstranit skupinu?', removeGroupHint: 'Odstranit „{name}“? Její lidé a klávesová zkratka budou odstraněni.', waiting: 'Stiskněte klávesu pro přiřazení', cancel: 'Zrušit', savedLocally: 'Uloženo místně — připojení lidé jsou první', savedPerson: 'Uložený člověk', inThisLobby: 'V této místnosti', add: 'Přidat', added: 'Přidáno', noPeople: 'Lidé, které potkáte v místnosti, zde zůstanou k dispozici.', languageSetting: 'Jazyk', inputDevice: 'Vstupní zařízení', outputDevice: 'Výstupní zařízení', startWindows: 'Spustit se systémem Windows', autoUpdates: 'Automaticky hledat aktualizace při spuštění', overlayPosition: 'Pozice překryvu', overlaySize: 'Velikost překryvu', everyone: 'Všichni', reply: 'Odpovědět', leave: 'Odejít', lobby: 'Místnost', lobbyCode: 'Kód místnosti', joinLobby: 'Připojit se', createLobby: 'Vytvořit místnost', nickname: 'Přezdívka', yourNickname: 'Vaše přezdívka', customLobby: 'Vlastní kód místnosti', optional: 'nepovinné', connected: 'Připojeno', assign: 'Přiřadit lidi' },
-} as const;
+
 
 const loadPreferences = (): Preferences => {
   try {
     const saved = { ...initial, ...JSON.parse(localStorage.getItem('logicomms:preferences') ?? '{}') };
     return {
       ...saved,
+      language: languages.some((language) => language.code === saved.language) ? saved.language : undefined,
+      overlayEnabled: typeof saved.overlayEnabled === 'boolean' ? saved.overlayEnabled : true,
       people: Array.isArray(saved.people) ? saved.people : [],
       inputVolume: typeof saved.inputVolume === 'number' ? saved.inputVolume : 100,
       outputVolume: typeof saved.outputVolume === 'number' ? saved.outputVolume : 100,
@@ -435,8 +436,10 @@ export default function App() {
     if (!isTauri()) return;
     const applyOverlayLayout = async () => {
       const overlay = await WebviewWindow.getByLabel('overlay');
+      if (!overlay) return;
+      if (!prefs.overlayEnabled) { await overlay.hide(); return; }
       const monitor = await currentMonitor();
-      if (!overlay || !monitor) return;
+      if (!monitor) return;
       const scale = Math.max(0.75, Math.min(1.5, prefs.overlayScale / 100));
       const size = new LogicalSize(240 * scale, 360 * scale);
       const workAreaPosition = monitor.workArea.position.toLogical(monitor.scaleFactor);
@@ -448,9 +451,10 @@ export default function App() {
       const y = prefs.overlayPosition.startsWith('bottom') ? bottom : workAreaPosition.y + margin;
       await overlay.setSize(size);
       await overlay.setPosition(new LogicalPosition(x, y));
+      await overlay.show();
     };
     void applyOverlayLayout().catch(() => undefined);
-  }, [prefs.overlayPosition, prefs.overlayScale]);
+  }, [prefs.overlayPosition, prefs.overlayScale, prefs.overlayEnabled]);
 
   // Push-to-talk key bindings.
   //
@@ -1012,7 +1016,7 @@ export default function App() {
             <div className="assignment-backdrop" role="presentation">
               <section className="capture-modal language-modal" role="dialog" aria-modal="true" aria-label={t.chooseLanguage}>
                 <h2>{t.chooseLanguage}</h2><p>{t.languageHint}</p>
-                <div className="language-options"><button onClick={() => update({ language: 'en' })}>🇬🇧 {t.english}</button><button onClick={() => update({ language: 'cs' })}>🇨🇿 {t.czech}</button></div>
+                <div className="language-options">{languages.map(({ code, flag, name }) => <button key={code} onClick={() => update({ language: code })}><span className="language-flag">{flag}</span> {name}</button>)}</div>
               </section>
             </div>
         )}
@@ -1025,21 +1029,24 @@ export default function App() {
                   {t.done}
                 </button>
               </div>
+              <nav className="settings-nav" aria-label={t.settings}>{(['general', 'audio', 'hotkeys', 'overlay', 'startup'] as const).map((section) => <a key={section} href={`#settings-${section}`}>{t[section]}</a>)}</nav>
+              <section className="settings-section" id="settings-general"><h3>{t.general}</h3>
               <label>
                 {t.languageSetting}
                 <select value={prefs.language ?? 'en'} onChange={(event) => update({ language: event.target.value as Language })}>
-                  <option value="en">🇬🇧 English</option>
-                  <option value="cs">🇨🇿 Čeština</option>
+                  {languages.map(({ code, flag, name }) => <option key={code} value={code}>{flag} {name}</option>)}
                 </select>
               </label>
               <label>
                 {t.nickname}
                 <input value={prefs.nickname} maxLength={32} onChange={(event) => update({ nickname: event.target.value })} />
               </label>
+              </section>
+              <section className="settings-section" id="settings-audio"><h3>{t.audio}</h3>
               <label>
                 {t.inputDevice}
                 <select value={prefs.input} onChange={(event) => update({ input: event.target.value })}>
-                  <option value="default">System default</option>
+                  <option value="default">{t.systemDefault}</option>
                   {devices.inputs.map((device) => (
                       <option key={device.deviceId} value={device.deviceId}>
                         {device.label}
@@ -1048,18 +1055,18 @@ export default function App() {
                 </select>
               </label>
               <label className="volume-control">
-                Microphone volume <span>{prefs.inputVolume}%</span>
+                {t.microphoneVolume} <span>{prefs.inputVolume}%</span>
                 <input type="range" min="0" max="200" step="5" value={prefs.inputVolume} onChange={(event) => update({ inputVolume: Number(event.target.value) })} />
               </label>
               <div className="microphone-test">
-                <div className="microphone-test-heading"><span>{testingMicrophone ? 'Testing microphone now' : 'Test microphone'}</span><span>{Math.round(microphoneLevel * 100)}%</span></div>
-                <div className="microphone-meter" aria-label="Microphone level"><i style={{ transform: `scaleX(${microphoneLevel})` }} /></div>
-                <button className={testingMicrophone ? 'quiet' : 'primary'} onClick={() => void toggleMicrophoneTest()}>{testingMicrophone ? 'Stop test' : 'Test microphone'}</button>
+                <div className="microphone-test-heading"><span>{testingMicrophone ? t.testingMicrophone : t.testMicrophone}</span><span>{Math.round(microphoneLevel * 100)}%</span></div>
+                <div className="microphone-meter" aria-label={t.microphoneLevel}><i style={{ transform: `scaleX(${microphoneLevel})` }} /></div>
+                <button className={testingMicrophone ? 'quiet' : 'primary'} onClick={() => void toggleMicrophoneTest()}>{testingMicrophone ? t.stopTest : t.testMicrophone}</button>
               </div>
               <label>
                 {t.outputDevice}
                 <select value={prefs.output} onChange={(event) => update({ output: event.target.value })}>
-                  <option value="default">System default</option>
+                  <option value="default">{t.systemDefault}</option>
                   {devices.outputs.map((device) => (
                       <option key={device.deviceId} value={device.deviceId}>
                         {device.label}
@@ -1068,12 +1075,14 @@ export default function App() {
                 </select>
               </label>
               <label className="volume-control">
-                Speaker volume <span>{prefs.outputVolume}%</span>
+                {t.speakerVolume} <span>{prefs.outputVolume}%</span>
                 <input type="range" min="0" max="100" step="5" value={prefs.outputVolume} onChange={(event) => update({ outputVolume: Number(event.target.value) })} />
               </label>
+              </section>
+              <section className="settings-section" id="settings-hotkeys"><h3>{t.hotkeys}</h3>
               <div className="binding-list">
                 <button className="binding" onClick={() => addGroup()}>
-                  <span>+ Add group</span>
+                  <span>+ {t.addGroup}</span>
                   <Key>…</Key>
                 </button>
                 {prefs.groups.map((binding) => (
@@ -1092,8 +1101,8 @@ export default function App() {
                   </div>
                 ))}
                 {[
-                  { id: 'all', name: 'Everyone', key: prefs.allKey },
-                  { id: 'reply', name: 'Reply', key: prefs.replyKey },
+                  { id: 'all', name: t.everyone, key: prefs.allKey },
+                  { id: 'reply', name: t.reply, key: prefs.replyKey },
                 ].map((binding) => (
                   <button key={binding.id} id={`hotkey-${binding.id}`} className="binding" onClick={() => setCapturing(binding.id)} onKeyDown={(event) => captureKey(binding.id, event)}>
                     <span>{binding.name}</span>
@@ -1101,13 +1110,15 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              </section>
+              <section className="settings-section" id="settings-startup"><h3>{t.startup}</h3>
               <label className="toggle">
                 <input
                     type="checkbox"
                     checked={prefs.launchAtLogin}
                     onChange={(event) => update({ launchAtLogin: event.target.checked })}
                 />{' '}
-                Start with Windows
+                {t.startWindows}
               </label>
               <label className="toggle">
                 <input
@@ -1115,22 +1126,27 @@ export default function App() {
                     checked={prefs.autoUpdate}
                     onChange={(event) => update({ autoUpdate: event.target.checked })}
                 />{' '}
-                Automatically check for updates on launch
+                {t.autoUpdates}
               </label>
+              </section>
+              <section className="settings-section" id="settings-overlay"><h3>{t.overlay}</h3>
+              <label className="toggle"><input type="checkbox" checked={prefs.overlayEnabled} onChange={(event) => update({ overlayEnabled: event.target.checked })} />{t.showOverlay}</label>
+              <p className="settings-help">{t.overlayHint}</p>
+              <fieldset disabled={!prefs.overlayEnabled} className="overlay-controls">
               <label>
-                Overlay position
+                {t.overlayPosition}
                 <select
                     value={prefs.overlayPosition}
                     onChange={(event) => update({ overlayPosition: event.target.value as OverlayPosition })}
                 >
-                  <option value="top-left">Top left</option>
-                  <option value="top-right">Top right</option>
-                  <option value="bottom-left">Bottom left</option>
-                  <option value="bottom-right">Bottom right</option>
+                  <option value="top-left">{t.topLeft}</option>
+                  <option value="top-right">{t.topRight}</option>
+                  <option value="bottom-left">{t.bottomLeft}</option>
+                  <option value="bottom-right">{t.bottomRight}</option>
                 </select>
               </label>
               <label className="overlay-scale-control">
-                Overlay size <span>{prefs.overlayScale}%</span>
+                {t.overlaySize} <span>{prefs.overlayScale}%</span>
                 <input
                     type="range"
                     min="75"
@@ -1140,6 +1156,8 @@ export default function App() {
                     onChange={(event) => update({ overlayScale: Number(event.target.value) })}
                 />
               </label>
+              </fieldset>
+              </section>
             </aside>
         )}
       </main>

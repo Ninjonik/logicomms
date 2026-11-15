@@ -661,3 +661,17 @@ button {
   border-left-color: #e4bd62;
   background: #8b6b2444;
 }
+.settings-panel { width: min(420px, calc(100vw - 20px)); padding: 0 16px 16px; scroll-behavior: smooth; }
+.settings-panel > .section-title { position: sticky; top: 0; z-index: 1; background: #303134; padding: 16px 0 12px; margin: 0; }
+.settings-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 12px; }
+.settings-nav a { padding: 6px 9px; border: 1px solid #55575b; border-radius: 6px; color: #e7e9eb; font-size: 12px; text-decoration: none; }
+.settings-nav a:hover, .settings-nav a:focus-visible { background: #46484d; }
+.settings-section { padding: 14px 0; border-top: 1px solid #4b4d52; scroll-margin-top: 55px; }
+.settings-section h3 { margin: 0 0 12px; color: #f0f1f3; font-size: 13px; }
+.settings-section label { margin-top: 12px; font-size: 12px; line-height: 1.5; }
+.settings-help { margin: 6px 0 12px; color: #aeb1b7; font-size: 12px; line-height: 1.5; }
+.overlay-controls { padding: 0; margin: 0; border: 0; min-width: 0; }
+.overlay-controls:disabled { opacity: .45; }
+.language-options button, .settings-panel select { font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', 'Segoe UI', sans-serif; }
+.language-flag { font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif; }
+@font-face { font-family: 'Noto Color Emoji'; src: url('/fonts/flags.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+1F1E6-1F1FF; }
